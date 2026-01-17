@@ -1,0 +1,90 @@
+import uuid
+from datetime import datetime
+from typing import Optional, List
+from sqlalchemy import String, Text, DateTime, ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column, relationship, DeclarativeBase
+from sqlalchemy.ext.asyncio import AsyncAttrs, create_async_engine, async_sessionmaker, AsyncSession
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+class Base(AsyncAttrs, DeclarativeBase):
+    pass
+
+class GoalStatus:
+    ACTIVE = "ACTIVE"
+    PAUSED = "PAUSED"
+    COMPLETED = "COMPLETED"
+    ABANDONED = "ABANDONED"
+
+class User(Base):
+    __tablename__ = "users"
+    
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    goals: Mapped[List["Goal"]] = relationship("Goal", back_populates="user", cascade="all, delete-orphan")
+    checkins: Mapped[List["Checkin"]] = relationship("Checkin", back_populates="user", cascade="all, delete-orphan")
+
+class Goal(Base):
+    __tablename__ = "goals"
+    
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    category: Mapped[str] = mapped_column(String(100), default="productivity")
+    status: Mapped[str] = mapped_column(String(20), default=GoalStatus.ACTIVE)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    user: Mapped["User"] = relationship("User", back_populates="goals")
+    checkins: Mapped[List["Checkin"]] = relationship("Checkin", back_populates="goal", cascade="all, delete-orphan")
+
+class Checkin(Base):
+    __tablename__ = "checkins"
+    
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    goal_id: Mapped[str] = mapped_column(String(36), ForeignKey("goals.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    response: Mapped[str] = mapped_column(Text, nullable=False)
+    mood: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    
+    goal: Mapped["Goal"] = relationship("Goal", back_populates="checkins")
+    user: Mapped["User"] = relationship("User", back_populates="checkins")
+
+# Database Setup
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/GoalPulse")
+
+# Ensure we use the async driver
+if DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+engine = create_async_engine(DATABASE_URL, echo=True)
+
+AsyncSessionLocal = async_sessionmaker(
+    bind=engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+    autocommit=False,
+    autoflush=False,
+)
+
+async def get_db():
+    async with AsyncSessionLocal() as db:
+        try:
+            yield db
+        finally:
+            await db.close()
+
+async def init_db():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+async def close_db():
+    await engine.dispose()

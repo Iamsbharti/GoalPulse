@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+openai
+sqlalchemy
+asyncpg
+alembic
+pydantic
+pydantic-settings
+langchain
+langchain-ollama
+langchain-openai
