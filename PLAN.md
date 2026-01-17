@@ -438,14 +438,14 @@ alembic downgrade -1
 ---
 
 
-*Last Updated: Day 1 - Project Setup*
+*Last Updated: January 18, 2026 - Database & API Integration Complete*
 
 ---
 
 
 ## Session: Backend Implementation & API Endpoints (Day 1 - Evening Session)
 
-**Date:** January 17, 2026
+**Date:** January 18, 2026
 **Status:** COMPLETED
 
 ### Completed This Session
@@ -453,100 +453,60 @@ alembic downgrade -1
 1. **Backend Services Layer**
    - Created `backend/models/database.py` - SQLAlchemy 2.0 models (Async)
    - Created `backend/services/goals_service.py` - Goals CRUD operations
-   - Created `backend/services/llm_service.py` - LLM abstraction layer (existing)
+   - Created `backend/services/llm_service.py` - LLM abstraction layer (with support for Ollama and OpenAI)
 
-2. **API Endpoints**
-   - `/health` - Health check (existing, verified working)
+2. **API Endpoints & Database Integration**
+   - `/health` - Health check (verified working)
    - `/` - Root endpoint with version info
-   - `/api/goals` - GET (list goals), POST (create goal)
-   - `/api/goals/:id` - GET (get goal), PUT (update goal), DELETE (delete goal)
-   - `/api/goals/:id/checkins` - GET (list checkins), POST (create checkin)
-   - `/api/chat` - Chat with intent detection (goal_setting, checkin, support, celebration)
+   - `/api/goals` - GET (list goals) & POST (create goal) **Fully connected to PostgreSQL**
+   - `/api/goals/generate-description` - POST (AI-powered goal description generation)
+   - `/api/goals/:id` - GET (get goal), PUT (update goal), DELETE (delete goal) **Fully connected to PostgreSQL**
+   - `/api/goals/:id/checkins` - GET (list checkins), POST (create checkin) **Fully connected to PostgreSQL**
+   - `/api/chat` - Chat with AI coach (connected to LLM service with Markdown support)
 
-3. **LangGraph Chat Agent**
-   - Created `backend/agents/chat_agent.py`
-   - Intent classification for coaching conversations
-   - State machine for chat/coach nodes
+3. **Frontend Integration**
+   - **Chat Interface**: Added `react-markdown` and `@tailwindcss/typography` for rich AI responses.
+   - **Goals Management**: Implemented full CRUD UI on `/goals` page.
+   - **AI Assistance**: Added "Generate with AI" feature for goal descriptions in the frontend.
 
-4. **CORS Configuration**
-   - Updated to allow localhost:3000 for frontend integration
+4. **Database Migration & Recovery**
+   - Successfully used Alembic to restore the `goals` table after a manual drop.
+   - Verified async migration flow with `alembic upgrade head`.
 
-5. **Database Migration Setup (Async)**
-   - Created `backend/alembic/env.py` - Async Alembic configuration
-   - Created `backend/alembic.ini` - Alembic settings (Removed conflicting hooks)
-   - Fixed Mako template syntax in `script.py.mako`
-   - Successfully ran initial migration: `alembic upgrade head`
-
-6. **Testing Results**
+5. **Testing Results**
    - Health check: OK
-   - Create goal: OK
-   - List goals: OK
-   - Chat intent detection: OK
-   - Database Migrations: OK (Tables created: users, goals, checkins)
+   - Goal Creation with AI Description: OK
+   - List goals from DB: OK
+   - Chat with Markdown formatting: OK
+   - Database Migrations: OK
 
 ### Files Created/Modified
 
-- `backend/models/database.py` (NEW) - SQLAlchemy models (Async configuration)
-- `backend/services/goals_service.py` (NEW) - Goals CRUD with SQLAlchemy
-- `backend/agents/chat_agent.py` (NEW)
-- `backend/api/routes.py` (NEW - placeholder)
-- `backend/alembic/env.py` (NEW) - Alembic async configuration
-- `backend/alembic/script.py.mako` (MODIFIED) - Fixed syntax errors
-- `backend/alembic.ini` (NEW) - Alembic settings
-- `backend/main.py` (MODIFIED - all endpoints)
-- `backend/requirements.txt` (MODIFIED - SQLAlchemy, asyncpg, alembic loose versioning)
-
-### Files to Update Next Session
-
-1. **Database Integration**
-   - Connect `/api/goals` endpoints to SQLAlchemy queries (currently using mock data/services)
-   - Connect `/api/goals/:id/checkins` endpoints to SQLAlchemy queries
-   - Implement user management
-
-2. **LangGraph Agent Enhancement**
-   - Integrate LLM service for actual AI responses
-   - Add goal context to conversations
-   - Implement check-in flow with mood tracking
-
-3. **Frontend Integration**
-   - Update goals page to fetch from API
-   - Add goal creation form
-   - Add check-in functionality
-
-### API Endpoints Now Available
-
-```
-GET    /health                              - Health check
-GET    /                                    - API info
-GET    /api/goals                           - List all goals
-POST   /api/goals                           - Create goal
-GET    /api/goals/:id                       - Get goal details
-PUT   /:id                       - /api/goals Update goal
-DELETE /api/goals/:id                       - Delete goal
-GET    /api/goals/:id/checkins              - List check-ins
-POST   /api/goals/:id/checkins              - Create check-in
-POST   /api/chat                            - Chat with AI coach
-```
+- `backend/api/routes.py` (MODIFIED) - Fully connected to GoalsService and LLMService
+- `backend/services/llm_service.py` (MODIFIED) - Fixed imports and base URL
+- `frontend/app/goals/page.tsx` (MODIFIED) - Implemented Goal CRUD and AI generation UI
+- `frontend/app/chat/page.tsx` (MODIFIED) - Added Markdown rendering support
+- `frontend/tailwind.config.ts` (MODIFIED) - Added typography plugin
+- `README.md` (MODIFIED) - Added database pointers
 
 ### Next Steps (Priority Order)
 
 1. **High Priority**
-   - Connect Goals API to SQLAlchemy database (replace placeholders)
-   - Connect Check-ins API to SQLAlchemy database
-   - Add user authentication/session handling
+   - Add user authentication/session handling (currently hardcoded to 'neo')
+   - Implement Check-in flow in the UI
+   - Enhance LangGraph agent for deeper coaching logic
 
 2. **Medium Priority**
-   - Integrate LLM with LangGraph agent
-   - Add conversation memory/context
-   - Implement goal reminders
+   - Add conversation memory/context persistence
+   - Implement goal reminders/notifications
+   - Progress visualization/charts
 
 3. **Lower Priority**
-   - Frontend goals CRUD
-   - Progress visualization
+   - User profile settings
+   - Social accountability features
    - Export functionality
 
 ---
 
 
-*Last Updated: January 17, 2026 - Database Setup Complete*
-*Next: Connecting API endpoints to the Database*
+*Last Updated: January 18, 2026 - Database & API Integration Complete*

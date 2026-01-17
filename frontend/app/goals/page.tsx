@@ -43,7 +43,8 @@ export default function GoalsPage() {
     
     setIsGenerating(true);
     try {
-      const response = await fetch("http://localhost:8000/api/goals/generate-description", {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const response = await fetch(`${apiUrl}/api/goals/generate-description`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title }),
@@ -62,7 +63,8 @@ export default function GoalsPage() {
     if (!title) return;
 
     try {
-      const response = await fetch("http://localhost:8000/api/goals", {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const response = await fetch(`${apiUrl}/api/goals`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
