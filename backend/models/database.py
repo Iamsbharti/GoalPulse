@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import Optional, List
-from sqlalchemy import String, Text, DateTime, ForeignKey
+from sqlalchemy import String, Text, DateTime, ForeignKey, select
 from sqlalchemy.orm import Mapped, mapped_column, relationship, DeclarativeBase
 from sqlalchemy.ext.asyncio import AsyncAttrs, create_async_engine, async_sessionmaker, AsyncSession
 import os
@@ -62,7 +62,9 @@ class Checkin(Base):
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/GoalPulse")
 
 # Ensure we use the async driver
-if DATABASE_URL.startswith("postgresql://"):
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+asyncpg://", 1)
+elif DATABASE_URL.startswith("postgresql://"):
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
 
 engine = create_async_engine(DATABASE_URL, echo=True)
@@ -85,6 +87,15 @@ async def get_db():
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    
+    # Seed the demo user
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(select(User).where(User.id == "neo"))
+        user = result.scalar_one_or_none()
+        if not user:
+            new_user = User(id="neo", email="neo@example.com", name="Neo")
+            session.add(new_user)
+            await session.commit()
 
 async def close_db():
     await engine.dispose()
