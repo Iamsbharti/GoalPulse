@@ -67,7 +67,16 @@ if DATABASE_URL.startswith("postgres://"):
 elif DATABASE_URL.startswith("postgresql://"):
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
 
-engine = create_async_engine(DATABASE_URL, echo=True)
+# Fix for Vercel/Neon: asyncpg doesn't support sslmode in URL
+if "sslmode=" in DATABASE_URL:
+    DATABASE_URL = DATABASE_URL.replace("?sslmode=require", "").replace("&sslmode=require", "")
+
+# Configure engine with SSL if on Vercel (indicated by removed sslmode or existing URL structure)
+connect_args = {}
+if "vercel" in DATABASE_URL or "neon" in DATABASE_URL or os.getenv("VERCEL"):
+    connect_args = {"ssl": "require"}
+
+engine = create_async_engine(DATABASE_URL, echo=True, connect_args=connect_args)
 
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,
