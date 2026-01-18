@@ -1,5 +1,6 @@
 from typing import TypedDict, List, Optional
 from langgraph.graph import StateGraph, END
+from services.llm_service import llm_service
 
 class AgentState(TypedDict):
     messages: List[str]
@@ -28,17 +29,9 @@ async def chat_node(state: AgentState) -> AgentState:
     
     intent = classify_intent(message)
     
-    response = ""
-    if intent == "goal_setting":
-        response = "I'd love to help you set a goal! What would you like to achieve? A good goal should be specific and meaningful to you."
-    elif intent == "checkin":
-        response = "Let's check in on your progress. How have you been doing with your goals recently?"
-    elif intent == "support":
-        response = "I'm here to help. What specific challenges are you facing? Let's work through this together."
-    elif intent == "celebration":
-        response = "That's wonderful! Celebrating wins, big and small, is so important. What exactly did you accomplish?"
-    else:
-        response = "I'm here to support you on your journey. What would you like to talk about today?"
+    prompt = f"User message: {message}\nIntent: {intent}\n\nRespond to the user in a helpful, supportive, and coaching manner suitable for a goal-tracking application. Keep it concise."
+    
+    response = await llm_service.generate(prompt)
     
     return {
         **state,

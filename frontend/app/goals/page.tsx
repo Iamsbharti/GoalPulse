@@ -24,7 +24,8 @@ export default function GoalsPage() {
 
   const fetchGoals = async () => {
     try {
-      const response = await fetch("http://localhost:8000/api/goals?userId=neo");
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const response = await fetch(`${apiUrl}/api/goals?userId=neo`);
       const data = await response.json();
       setGoals(data.goals);
     } catch (error) {
