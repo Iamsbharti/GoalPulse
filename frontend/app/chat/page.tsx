@@ -1,9 +1,14 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import Link from "next/link";
-import ReactMarkdown from "react-markdown";
+import dynamic from "next/dynamic";
 import { Loader2 } from "lucide-react";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+
+const ReactMarkdown = dynamic(() => import("react-markdown"), {
+  loading: () => <span className="text-gray-400">Loading...</span>,
+});
 
 interface Message {
   id: string;
@@ -29,6 +34,7 @@ const quickReplies = [
 ];
 
 const STORAGE_KEY = "goalpulse_chat_messages";
+const MAX_MESSAGES = 100;
 
 const DEFAULT_WELCOME_MESSAGE: Message = {
   id: "welcome",
@@ -47,22 +53,31 @@ export default function ChatPage() {
   const [selectedGoal, setSelectedGoal] = useState<string | null>(null);
   const [hasInitialized, setHasInitialized] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
+  const mainContainerRef = useRef<HTMLElement>(null);
+  const inputRef = useRef(input);
+  
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    inputRef.current = input;
+  }, [input]);
+
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, []);
 
   useEffect(() => {
     if (messages.length > 0) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+      const trimmedMessages = messages.slice(-MAX_MESSAGES);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmedMessages));
     }
   }, [messages]);
 
-  const fetchGoals = async () => {
+  useEffect(() => {
+    if (messages.length > 0 && mainContainerRef.current) {
+      mainContainerRef.current.scrollTop = mainContainerRef.current.scrollHeight;
+    }
+  }, [messages.length, hasInitialized]);
+
+  const fetchGoals = useCallback(async () => {
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
       const response = await fetch(`${apiUrl}/api/goals?userId=neo`);
@@ -71,6 +86,22 @@ export default function ChatPage() {
     } catch (error) {
       console.error("Error fetching goals:", error);
     }
+  }, []);
+
+  const isValidMessage = (msg: unknown): msg is Message => {
+    if (!msg || typeof msg !== 'object') return false;
+    const m = msg as Record<string, unknown>;
+    return (
+      typeof m.id === 'string' &&
+      (m.role === 'user' || m.role === 'assistant') &&
+      typeof m.content === 'string' &&
+      typeof m.timestamp === 'string'
+    );
+  };
+
+  const isValidMessagesArray = (data: unknown): data is Message[] => {
+    if (!Array.isArray(data)) return false;
+    return data.every(isValidMessage);
   };
 
   const initializeChat = async () => {
@@ -81,39 +112,43 @@ export default function ChatPage() {
       const storedMessages = localStorage.getItem(STORAGE_KEY);
       
       if (storedMessages) {
-        const parsedMessages = JSON.parse(storedMessages);
-        if (parsedMessages.length > 0) {
-          setMessages(parsedMessages);
-          setHasInitialized(true);
-          await fetchGoals();
-          setIsLoading(false);
-          return;
+        try {
+          const parsedMessages = JSON.parse(storedMessages);
+          if (isValidMessagesArray(parsedMessages) && parsedMessages.length > 0) {
+            setMessages(parsedMessages.slice(-MAX_MESSAGES));
+            setHasInitialized(true);
+            await fetchGoals();
+            setIsLoading(false);
+            return;
+          }
+        } catch (parseError) {
+          console.warn('Invalid stored messages, clearing:', parseError);
+          localStorage.removeItem(STORAGE_KEY);
         }
       }
 
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
       
-      await fetchGoals();
-
-      const response = await fetch(`${apiUrl}/api/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: "Hello! I'm ready for our check-in.",
-          userId: "neo",
+      await Promise.all([
+        fetchGoals(),
+        fetch(`${apiUrl}/api/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: "Hello! I'm ready for our check-in.",
+            userId: "neo",
+          }),
+        }).then(res => res.json()).then(data => {
+          const welcomeMessage: Message = {
+            id: "welcome",
+            role: "assistant",
+            content: data.response || DEFAULT_WELCOME_MESSAGE.content,
+            timestamp: new Date().toISOString(),
+          };
+          setMessages([welcomeMessage]);
         }),
-      });
+      ]);
 
-      const data = await response.json();
-
-      const welcomeMessage: Message = {
-        id: "welcome",
-        role: "assistant",
-        content: data.response || DEFAULT_WELCOME_MESSAGE.content,
-        timestamp: new Date().toISOString(),
-      };
-
-      setMessages([welcomeMessage]);
       setHasInitialized(true);
     } catch (error) {
       console.error("Error initializing chat:", error);
@@ -126,7 +161,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     initializeChat();
-  }, []);
+  }, [initializeChat]);
 
   const clearChat = () => {
     localStorage.removeItem(STORAGE_KEY);
@@ -135,8 +170,8 @@ export default function ChatPage() {
     initializeChat();
   };
 
-  const sendMessage = async (messageText?: string) => {
-    const textToSend = messageText || input.trim();
+  const sendMessage = useCallback(async (messageText?: string) => {
+    const textToSend = messageText || inputRef.current.trim();
     if (!textToSend || isSending) return;
 
     const userMessage: Message = {
@@ -188,9 +223,11 @@ export default function ChatPage() {
     } finally {
       setIsSending(false);
     }
-  };
+  }, [isSending, selectedGoal]);
 
-  const selectedGoalData = goals.find(g => g.id === selectedGoal);
+  const selectedGoalData = useMemo(() => 
+    goals.find(g => g.id === selectedGoal) || null
+  , [goals, selectedGoal]);
 
   return (
     <div className="min-h-screen bg-background-light dark:bg-background-dark flex">
@@ -301,8 +338,9 @@ export default function ChatPage() {
             </div>
           )}
 
-          <main className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-6 no-scrollbar">
-            {isLoading ? (
+          <ErrorBoundary>
+            <main ref={mainContainerRef} className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-6 no-scrollbar">
+              {isLoading ? (
               <div className="flex flex-col items-center justify-center h-full space-y-4">
                 <div className="relative">
                   <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
@@ -372,6 +410,7 @@ export default function ChatPage() {
               </>
             )}
           </main>
+          </ErrorBoundary>
 
           <div className="p-4 lg:p-6 border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-[#121217]">
             {selectedGoalData && (
