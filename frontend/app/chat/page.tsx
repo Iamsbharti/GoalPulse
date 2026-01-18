@@ -28,6 +28,15 @@ const quickReplies = [
   { id: "check_progress", text: "How am I doing? 📊", icon: "bar_chart" },
 ];
 
+const STORAGE_KEY = "goalpulse_chat_messages";
+
+const DEFAULT_WELCOME_MESSAGE: Message = {
+  id: "welcome",
+  role: "assistant",
+  content: "Hey there! I'm your GoalPulse AI coach. How are you doing with your goals today?",
+  timestamp: new Date().toISOString(),
+};
+
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
@@ -36,6 +45,7 @@ export default function ChatPage() {
   const [isSending, setIsSending] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [selectedGoal, setSelectedGoal] = useState<string | null>(null);
+  const [hasInitialized, setHasInitialized] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -44,6 +54,12 @@ export default function ChatPage() {
 
   useEffect(() => {
     scrollToBottom();
+  }, [messages]);
+
+  useEffect(() => {
+    if (messages.length > 0) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+    }
   }, [messages]);
 
   const fetchGoals = async () => {
@@ -58,8 +74,23 @@ export default function ChatPage() {
   };
 
   const initializeChat = async () => {
+    if (hasInitialized) return;
+    
     setIsLoading(true);
     try {
+      const storedMessages = localStorage.getItem(STORAGE_KEY);
+      
+      if (storedMessages) {
+        const parsedMessages = JSON.parse(storedMessages);
+        if (parsedMessages.length > 0) {
+          setMessages(parsedMessages);
+          setHasInitialized(true);
+          await fetchGoals();
+          setIsLoading(false);
+          return;
+        }
+      }
+
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
       
       await fetchGoals();
@@ -75,24 +106,19 @@ export default function ChatPage() {
 
       const data = await response.json();
 
-      setMessages([
-        {
-          id: "welcome",
-          role: "assistant",
-          content: data.response || "Hey there! I'm your GoalPulse AI coach. How are you doing with your goals today?",
-          timestamp: new Date().toISOString(),
-        },
-      ]);
+      const welcomeMessage: Message = {
+        id: "welcome",
+        role: "assistant",
+        content: data.response || DEFAULT_WELCOME_MESSAGE.content,
+        timestamp: new Date().toISOString(),
+      };
+
+      setMessages([welcomeMessage]);
+      setHasInitialized(true);
     } catch (error) {
       console.error("Error initializing chat:", error);
-      setMessages([
-        {
-          id: "welcome",
-          role: "assistant",
-          content: "Hey there! I'm your GoalPulse AI coach. How are you doing with your goals today?",
-          timestamp: new Date().toISOString(),
-        },
-      ]);
+      setMessages([DEFAULT_WELCOME_MESSAGE]);
+      setHasInitialized(true);
     } finally {
       setIsLoading(false);
     }
@@ -101,6 +127,13 @@ export default function ChatPage() {
   useEffect(() => {
     initializeChat();
   }, []);
+
+  const clearChat = () => {
+    localStorage.removeItem(STORAGE_KEY);
+    setMessages([]);
+    setHasInitialized(false);
+    initializeChat();
+  };
 
   const sendMessage = async (messageText?: string) => {
     const textToSend = messageText || input.trim();
@@ -223,11 +256,11 @@ export default function ChatPage() {
           <div className="flex-1"></div>
           <div className="flex items-center gap-2">
             <button 
-              onClick={initializeChat}
+              onClick={clearChat}
               className="flex items-center gap-2 px-3 py-2 text-sm text-[#686586] dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
             >
               <span className="material-symbols-outlined">refresh</span>
-              <span className="hidden lg:inline">Restart</span>
+              <span className="hidden lg:inline">New Chat</span>
             </button>
             <button className="p-2 text-[#686586] dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">
               <span className="material-symbols-outlined">settings</span>
@@ -279,10 +312,18 @@ export default function ChatPage() {
                     <Loader2 className="animate-spin text-primary" size={24} />
                   </div>
                 </div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Connecting with Coach Aura...</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Loading your conversation...</p>
               </div>
             ) : (
               <>
+                {messages.length === 0 && (
+                  <div className="flex flex-col items-center justify-center h-full space-y-4">
+                    <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+                      <span className="material-symbols-outlined text-primary text-3xl">forum</span>
+                    </div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Start a conversation with Coach Aura</p>
+                  </div>
+                )}
                 {messages.map((message) => (
                   <div key={message.id} className={`flex flex-col ${message.role === "user" ? "items-end" : "items-start"}`}>
                     {message.role === "assistant" && (
