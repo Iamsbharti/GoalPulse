@@ -29,6 +29,7 @@ interface Checkin {
 export default function Home() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [recentCheckins, setRecentCheckins] = useState<Checkin[]>([]);
+  const [leastActiveGoals, setLeastActiveGoals] = useState<any[]>([]);
   const [motivationLevel, setMotivationLevel] = useState<number>(0);
   const [dailyPulseMessage, setDailyPulseMessage] = useState<string>("");
 
@@ -46,8 +47,13 @@ export default function Home() {
       try {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
         // Fetch Goals & Recent Checkins (Fast)
-        const response = await fetch(`${apiUrl}/api/goals?userId=neo`);
-        const data = await response.json();
+        const [goalsRes, checkinsRes, leastActiveRes] = await Promise.all([
+          fetch(`${apiUrl}/api/goals?userId=neo`),
+          fetch(`${apiUrl}/api/checkins/recent?userId=neo`),
+          fetch(`${apiUrl}/api/goals/least-active?userId=neo`)
+        ]);
+
+        const data = await goalsRes.json();
         const mappedGoals = data.goals.map((g: any) => {
           const cat = CATEGORIES.find(c => c.id === g.category) || CATEGORIES[2];
           return {
@@ -60,9 +66,11 @@ export default function Home() {
         });
         setGoals(mappedGoals);
 
-        const checkinsResponse = await fetch(`${apiUrl}/api/checkins/recent?userId=neo`);
-        const checkinsData = await checkinsResponse.json();
+        const checkinsData = await checkinsRes.json();
         setRecentCheckins(checkinsData.checkins || []);
+
+        const leastActiveData = await leastActiveRes.json();
+        setLeastActiveGoals(leastActiveData.goals || []);
 
         // Goals are ready, show dashboard
         setIsInitialLoading(false);
@@ -94,8 +102,8 @@ export default function Home() {
       <aside className={`${isSidebarOpen ? 'w-64' : 'w-20'} hidden lg:flex flex-col bg-white dark:bg-[#121217] border-r border-gray-100 dark:border-gray-800 transition-all duration-300 sticky top-0 h-screen`}>
         <div className="p-6 border-b border-gray-100 dark:border-gray-800">
           <div className="flex items-center gap-3">
-            <div className="size-10 shrink-0 bg-primary/10 rounded-full flex items-center justify-center border border-primary/20">
-              <span className="material-symbols-outlined text-primary text-2xl">smart_toy</span>
+            <div className="size-10 shrink-0 bg-primary/10 rounded-full flex items-center justify-center border border-primary/20 overflow-hidden">
+              <img src="/logo.png" alt="GoalPulse Logo" className="w-full h-full object-cover" />
             </div>
             {isSidebarOpen && <h1 className="text-xl font-bold text-[#121217] dark:text-white">GoalPulse</h1>}
           </div>
@@ -276,24 +284,41 @@ export default function Home() {
                 </Link>
               </div>
 
-              <div className="bg-white dark:bg-white/5 rounded-2xl shadow-sm border border-black/5 dark:border-white/10 p-6">
-                <h4 className="font-bold text-[#121217] dark:text-white mb-4">Upcoming Check-ins</h4>
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800">
-                    <span className="material-symbols-outlined text-amber-accent">schedule</span>
-                    <div className="flex-1">
-                      <p className="font-medium text-[#121217] dark:text-white text-sm">Morning Run</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">Tomorrow, 6:00 AM</p>
-                    </div>
+              <div className="bg-white dark:bg-white/5 rounded-2xl shadow-sm border border-black/5 dark:border-white/10 p-6 min-h-[200px]">
+                <h4 className="font-bold text-[#121217] dark:text-white mb-4 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-orange-500">warning</span>
+                  Needs Attention
+                </h4>
+                {isInitialLoading ? (
+                  <div className="space-y-3 animate-pulse">
+                    <div className="h-12 bg-gray-100 dark:bg-gray-800 rounded-xl w-full"></div>
+                    <div className="h-12 bg-gray-100 dark:bg-gray-800 rounded-xl w-full"></div>
                   </div>
-                  <div className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50">
-                    <span className="material-symbols-outlined text-primary">event</span>
-                    <div className="flex-1">
-                      <p className="font-medium text-[#121217] dark:text-white text-sm">Meditation</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">In 2 days</p>
-                    </div>
+                ) : leastActiveGoals.length === 0 ? (
+                  <p className="text-sm text-gray-500 dark:text-gray-400">All goals are on track!</p>
+                ) : (
+                  <div className="space-y-3">
+                    {leastActiveGoals.map((goal) => (
+                      <div key={goal.id} className="flex items-center gap-3 p-3 rounded-xl bg-orange-50 dark:bg-orange-900/10 border border-orange-100 dark:border-orange-900/20">
+                        <div className="size-8 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center shrink-0 text-orange-600 dark:text-orange-400">
+                          <span className="material-symbols-outlined text-sm">priority_high</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-[#121217] dark:text-white text-sm truncate">{goal.title}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">{goal.checkin_count} check-ins total</p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setSelectedGoalForCheckin(goal);
+                          }}
+                          className="text-xs font-bold text-orange-600 dark:text-orange-400 bg-white dark:bg-white/10 px-2.5 py-1.5 rounded-lg border border-orange-200 dark:border-orange-800 hover:bg-orange-50 dark:hover:bg-white/20 transition-colors"
+                        >
+                          Check In
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                </div>
+                )}
               </div>
 
               <div className="bg-white dark:bg-white/5 rounded-2xl shadow-sm border border-black/5 dark:border-white/10 p-6">

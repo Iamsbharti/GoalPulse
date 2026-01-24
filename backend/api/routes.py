@@ -101,6 +101,12 @@ async def create_goal(request: CreateGoalRequest, userId: str = "neo", db: Async
         "message": "Goal created successfully"
     }
 
+@router.get("/api/goals/least-active")
+async def get_least_active_goals(userId: str = "neo", db: AsyncSession = Depends(get_db)):
+    goals_service = GoalsService(db)
+    goals = await goals_service.get_least_active_goals(userId)
+    return {"goals": goals}
+
 @router.get("/api/goals/{goal_id}")
 async def get_goal(goal_id: str, db: AsyncSession = Depends(get_db)):
     goals_service = GoalsService(db)
@@ -177,6 +183,8 @@ async def get_recent_checkins(userId: str = "neo", db: AsyncSession = Depends(ge
             for c in checkins
         ]
     }
+
+
 
 @router.get("/api/insights/motivation")
 async def get_motivation_insight(userId: str = "neo", db: AsyncSession = Depends(get_db)):

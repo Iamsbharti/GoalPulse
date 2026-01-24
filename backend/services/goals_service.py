@@ -95,6 +95,32 @@ class GoalsService:
         )
         return list(result.scalars().all())
 
+    async def get_least_active_goals(self, user_id: str, limit: int = 3) -> List[dict]:
+        from sqlalchemy import func
+        
+        # Query: Select Goal, Count(Checkin)
+        # Left Join guarantees we get goals with 0 checkins too
+        result = await self.session.execute(
+            select(Goal, func.count(Checkin.id).label("checkin_count"))
+            .outerjoin(Checkin, Checkin.goal_id == Goal.id)
+            .where(Goal.user_id == user_id, Goal.status == GoalStatus.ACTIVE)
+            .group_by(Goal.id)
+            .order_by(func.count(Checkin.id).asc())
+            .limit(limit)
+        )
+        
+        # Format result as list of dicts with goal + count
+        rows = result.all()
+        return [
+            {
+                "id": goal.id,
+                "title": goal.title,
+                "category": goal.category,
+                "checkin_count": count
+            }
+            for goal, count in rows
+        ]
+
     async def create_checkin(
         self,
         goal_id: str,

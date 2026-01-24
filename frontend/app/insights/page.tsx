@@ -10,8 +10,8 @@ export default function InsightsPage() {
       <aside className={`${isSidebarOpen ? 'w-64' : 'w-20'} hidden lg:flex flex-col bg-white dark:bg-[#121217] border-r border-gray-100 dark:border-gray-800 transition-all duration-300 sticky top-0 h-screen`}>
         <div className="p-6 border-b border-gray-100 dark:border-gray-800">
           <div className="flex items-center gap-3">
-            <div className="size-10 shrink-0 bg-primary/10 rounded-full flex items-center justify-center border border-primary/20">
-              <span className="material-symbols-outlined text-primary text-2xl">smart_toy</span>
+            <div className="size-10 shrink-0 bg-primary/10 rounded-full flex items-center justify-center border border-primary/20 overflow-hidden">
+              <img src="/logo.png" alt="GoalPulse Logo" className="w-full h-full object-cover" />
             </div>
             {isSidebarOpen && <h1 className="text-xl font-bold text-[#121217] dark:text-white">GoalPulse</h1>}
           </div>
