@@ -12,3 +12,5 @@ frontend/package-lock.json
 /opencode
 .opencode
 docs/
+.claude/
+/claude

@@ -3,6 +3,9 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
+import { CheckInModal } from "@/components/CheckInModal";
+import { CheckinHistoryModal } from "@/components/CheckinHistoryModal";
+import { EditResolutionModal } from "@/components/EditResolutionModal";
 
 interface Goal {
   id: string;
@@ -26,14 +29,13 @@ const personas: CoachPersona[] = [
   { id: "cheerleader", name: "Cheerleader", description: "High energy, constant encouragement and positivity.", icon: "sentiment_very_satisfied", iconBg: "bg-yellow-100", iconColor: "text-yellow-600" },
   { id: "analytical", name: "Analytical", description: "Data-driven insights, focus on patterns and logic.", icon: "monitoring", iconBg: "bg-blue-100", iconColor: "text-blue-600" },
   { id: "tough_love", name: "Tough Love", description: "No excuses, direct communication and high-accountability.", icon: "military_tech", iconBg: "bg-red-100", iconColor: "text-red-600" },
+  { id: "tough_love", name: "Tough Love", description: "No excuses, direct communication and high-accountability.", icon: "military_tech", iconBg: "bg-red-100", iconColor: "text-red-600" },
 ];
 
-const categories = [
-  { id: "health", name: "Health", icon: "fitness_center" },
-  { id: "finance", name: "Finance", icon: "payments" },
-  { id: "productivity", name: "Productivity", icon: "bolt" },
-  { id: "learning", name: "Learning", icon: "menu_book" },
-];
+import { CATEGORIES, STATUS_COLORS } from "@/lib/constants";
+import { DeleteConfirmationModal } from "@/components/DeleteConfirmationModal";
+
+
 
 export default function GoalsPage() {
   const [goals, setGoals] = useState<Goal[]>([]);
@@ -49,7 +51,19 @@ export default function GoalsPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
 
-  const selectedCategoryData = categories.find(c => c.id === selectedCategory);
+  // Modal state
+  const [checkInModalGoal, setCheckInModalGoal] = useState<{ id: string; title: string } | null>(null);
+  const [historyModalGoal, setHistoryModalGoal] = useState<{ id: string; title: string } | null>(null);
+
+  // Edit/Delete state
+  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
+  const [deletingGoal, setDeletingGoal] = useState<Goal | null>(null);
+
+  // Refresh trigger
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const selectedCategoryData = CATEGORIES.find(c => c.id === selectedCategory);
   const selectedPersonaData = personas.find(p => p.id === selectedPersona);
 
   const fetchGoals = async () => {
@@ -67,7 +81,7 @@ export default function GoalsPage() {
 
   useEffect(() => {
     fetchGoals();
-  }, []);
+  }, [refreshKey]);
 
   const generateDescription = async () => {
     if (!title) return;
@@ -124,6 +138,25 @@ export default function GoalsPage() {
       }
     } catch (error) {
       console.error("Error creating goal:", error);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deletingGoal) return;
+
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const response = await fetch(`${apiUrl}/api/goals/${deletingGoal.id}`, {
+        method: "DELETE",
+      });
+
+      if (response.ok) {
+        setRefreshKey(prev => prev + 1);
+        setActiveMenuId(null);
+        setDeletingGoal(null);
+      }
+    } catch (error) {
+      console.error("Error deleting goal:", error);
     }
   };
 
@@ -232,15 +265,14 @@ export default function GoalsPage() {
                       />
                     </div>
                     <div className="flex flex-wrap gap-3">
-                      {categories.map((cat) => (
+                      {CATEGORIES.map((cat) => (
                         <button
                           key={cat.id}
                           onClick={() => setSelectedCategory(cat.id)}
-                          className={`flex items-center gap-2 px-6 py-3 rounded-full transition-all ${
-                            selectedCategory === cat.id
-                              ? "bg-primary text-white shadow-lg shadow-primary/25"
-                              : "bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 hover:border-primary/50"
-                          }`}
+                          className={`flex items-center gap-2 px-6 py-3 rounded-full transition-all ${selectedCategory === cat.id
+                            ? "bg-primary text-white shadow-lg shadow-primary/25"
+                            : "bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 hover:border-primary/50"
+                            }`}
                         >
                           <span className="material-symbols-outlined">{cat.icon}</span>
                           <span className="font-medium">{cat.name}</span>
@@ -266,9 +298,8 @@ export default function GoalsPage() {
                             if (e.target.value.trim()) setTitleError(false);
                           }}
                           placeholder="e.g., Run a Marathon"
-                          className={`w-full rounded-xl border-none bg-gray-50 dark:bg-gray-800 p-4 text-lg shadow-sm focus:ring-2 placeholder:text-gray-400 text-[#121217] dark:text-white ${
-                            titleError ? "ring-2 ring-red-500" : "focus:ring-primary dark:focus:ring-primary/50"
-                          }`}
+                          className={`w-full rounded-xl border-none bg-gray-50 dark:bg-gray-800 p-4 text-lg shadow-sm focus:ring-2 placeholder:text-gray-400 text-[#121217] dark:text-white ${titleError ? "ring-2 ring-red-500" : "focus:ring-primary dark:focus:ring-primary/50"
+                            }`}
                         />
                         {titleError && <p className="text-red-500 text-sm">Please enter a goal name</p>}
                       </div>
@@ -304,9 +335,8 @@ export default function GoalsPage() {
                         <div
                           key={persona.id}
                           onClick={() => setSelectedPersona(persona.id)}
-                          className={`relative flex flex-col p-6 bg-gray-50 dark:bg-gray-800 rounded-2xl border-2 transition-all cursor-pointer ${
-                            selectedPersona === persona.id ? "border-primary bg-primary/5" : "border-transparent hover:border-primary/30"
-                          }`}
+                          className={`relative flex flex-col p-6 bg-gray-50 dark:bg-gray-800 rounded-2xl border-2 transition-all cursor-pointer ${selectedPersona === persona.id ? "border-primary bg-primary/5" : "border-transparent hover:border-primary/30"
+                            }`}
                         >
                           <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-4 ${persona.iconBg}`}>
                             <span className={`material-symbols-outlined text-4xl ${persona.iconColor}`}>{persona.icon}</span>
@@ -327,7 +357,7 @@ export default function GoalsPage() {
                 {step === 4 && (
                   <div className="animate-in fade-in">
                     <h3 className="text-lg font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400 mb-6">4. Preview & Create</h3>
-                    
+
                     <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl p-6 space-y-6">
                       <div className="flex items-start gap-4">
                         <div className="size-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
@@ -393,7 +423,7 @@ export default function GoalsPage() {
                   ) : (
                     <div className="w-24"></div>
                   )}
-                  
+
                   {step < 4 ? (
                     <button
                       onClick={nextStep}
@@ -565,8 +595,56 @@ export default function GoalsPage() {
                         </span>
                       </div>
                     </div>
-                    <button className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
-                      <span className="material-symbols-outlined">more_vert</span>
+                    <div className="relative">
+                      <button
+                        onClick={() => setActiveMenuId(activeMenuId === goal.id ? null : goal.id)}
+                        className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors rounded-full hover:bg-gray-100 dark:hover:bg-gray-800"
+                      >
+                        <span className="material-symbols-outlined">more_vert</span>
+                      </button>
+
+                      {activeMenuId === goal.id && (
+                        <>
+                          <div className="fixed inset-0 z-10" onClick={() => setActiveMenuId(null)}></div>
+                          <div className="absolute right-0 top-10 w-48 bg-white dark:bg-[#1a1a2e] rounded-xl shadow-xl border border-gray-100 dark:border-gray-700 z-20 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                            <button
+                              onClick={() => {
+                                setEditingGoal(goal);
+                                setActiveMenuId(null);
+                              }}
+                              className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-left"
+                            >
+                              <span className="material-symbols-outlined text-lg">edit</span>
+                              Edit Resolution
+                            </button>
+                            <button
+                              onClick={() => setDeletingGoal(goal)}
+                              className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors text-left"
+                            >
+                              <span className="material-symbols-outlined text-lg">delete</span>
+                              Delete
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex gap-3 mt-6">
+                    <button
+                      onClick={() => setCheckInModalGoal({ id: goal.id, title: goal.title })}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-primary/10 text-primary rounded-xl font-medium hover:bg-primary/20 transition-colors"
+                    >
+                      <span className="material-symbols-outlined">check_circle</span>
+                      <span>Check In</span>
+                    </button>
+                    <button
+                      onClick={() => setHistoryModalGoal({ id: goal.id, title: goal.title })}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-xl font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                    >
+                      <span className="material-symbols-outlined">history</span>
+                      <span>History</span>
                     </button>
                   </div>
                 </div>
@@ -584,6 +662,42 @@ export default function GoalsPage() {
           )}
         </main>
       </div>
+
+      {checkInModalGoal && (
+        <CheckInModal
+          isOpen={true}
+          onClose={() => setCheckInModalGoal(null)}
+          goalId={checkInModalGoal.id}
+          goalTitle={checkInModalGoal.title}
+          onCheckInComplete={() => setRefreshKey(prev => prev + 1)}
+        />
+      )}
+
+      {historyModalGoal && (
+        <CheckinHistoryModal
+          isOpen={true}
+          onClose={() => setHistoryModalGoal(null)}
+          goalId={historyModalGoal.id}
+          goalTitle={historyModalGoal.title}
+        />
+      )}
+
+      {editingGoal && (
+        <EditResolutionModal
+          isOpen={true}
+          onClose={() => setEditingGoal(null)}
+          goal={editingGoal}
+          onGoalUpdated={() => setRefreshKey(prev => prev + 1)}
+        />
+      )}
+
+      <DeleteConfirmationModal
+        isOpen={!!deletingGoal}
+        onClose={() => setDeletingGoal(null)}
+        onConfirm={confirmDelete}
+        title="Delete Resolution?"
+        description={`Are you sure you want to delete "${deletingGoal?.title}"? This action cannot be undone.`}
+      />
 
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-background-dark/90 backdrop-blur-xl border-t border-black/5 dark:border-white/10 px-6 py-3 pb-8 z-50">
         <div className="flex justify-between items-center max-w-md mx-auto">

@@ -28,8 +28,9 @@ class UpdateGoalRequest(BaseModel):
     status: Optional[str] = None
 
 class CreateCheckinRequest(BaseModel):
-    response: str
-    mood: Optional[str] = None
+    progress: str  # YES | NO | PARTIAL
+    mood: str      # GREAT | OKAY | LOW
+    response: str  # free text
 
 @router.post("/api/chat")
 async def chat(request: ChatRequest):
@@ -88,7 +89,7 @@ async def create_goal(request: CreateGoalRequest, userId: str = "neo", db: Async
         user_id=userId,
         title=request.title,
         description=description,
-        category="productivity" # Hardcoded as requested
+        category=request.category
     )
     
     return {
@@ -142,7 +143,48 @@ async def create_checkin(goal_id: str, request: CreateCheckinRequest, userId: st
     checkin = await goals_service.create_checkin(
         goal_id=goal_id,
         user_id=userId,
-        response=request.response,
-        mood=request.mood
+        progress=request.progress,
+        mood=request.mood,
+        response=request.response
     )
-    return checkin
+    return {
+        "id": checkin.id,
+        "goal_id": checkin.goal_id,
+        "user_id": checkin.user_id,
+        "progress": checkin.progress,
+        "mood": checkin.mood,
+        "response": checkin.response,
+        "created_at": checkin.created_at.isoformat() if checkin.created_at else None
+    }
+
+@router.get("/api/checkins/recent")
+async def get_recent_checkins(userId: str = "neo", db: AsyncSession = Depends(get_db)):
+    goals_service = GoalsService(db)
+    checkins = await goals_service.get_user_recent_checkins(userId)
+    
+    return {
+        "checkins": [
+            {
+                "id": c.id,
+                "goalId": c.goal_id,
+                "goalTitle": c.goal.title if c.goal else "Unknown Goal",
+                "goalCategory": c.goal.category if c.goal else "productivity",
+                "progress": c.progress,
+                "mood": c.mood,
+                "response": c.response,
+                "date": c.created_at.isoformat() if c.created_at else None
+            }
+            for c in checkins
+        ]
+    }
+
+@router.get("/api/insights/motivation")
+async def get_motivation_insight(userId: str = "neo", db: AsyncSession = Depends(get_db)):
+    goals_service = GoalsService(db)
+    motivation_data = await goals_service.calculate_motivation_level(userId)
+    message = await goals_service.generate_motivation_hook(userId, motivation_data)
+    
+    return {
+        "level": motivation_data["score"],
+        "message": message
+    }

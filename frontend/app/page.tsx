@@ -1,7 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { CATEGORIES } from "@/lib/constants";
+import { AddResolutionModal } from "@/components/AddResolutionModal";
+import { GoalSelectorModal } from "@/components/GoalSelectorModal";
+import { CheckInModal } from "@/components/CheckInModal";
 
 interface Goal {
   id: string;
@@ -11,12 +15,76 @@ interface Goal {
   category: string;
 }
 
+interface Checkin {
+  id: string;
+  goalTitle: string;
+  goalCategory: string;
+  progress: string;
+  response: string;
+  mood: string;
+  date: string;
+}
+
 export default function Home() {
-  const [goals] = useState<Goal[]>([
-    { id: "1", title: "Morning Run", progress: 60, icon: "directions_run", category: "60% of goal" },
-    { id: "2", title: "Save $500/mo", progress: 64, icon: "savings", category: "$320 saved" },
-    { id: "3", title: "Read 20 books", progress: 20, icon: "menu_book", category: "4/20 books" },
-  ]);
+  const [goals, setGoals] = useState<Goal[]>([]);
+  const [recentCheckins, setRecentCheckins] = useState<Checkin[]>([]);
+  const [motivationLevel, setMotivationLevel] = useState<number>(0);
+  const [dailyPulseMessage, setDailyPulseMessage] = useState<string>("");
+
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isMotivationLoading, setIsMotivationLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Modal State
+  const [isAddResolutionOpen, setIsAddResolutionOpen] = useState(false);
+  const [isGoalSelectorOpen, setIsGoalSelectorOpen] = useState(false);
+  const [selectedGoalForCheckin, setSelectedGoalForCheckin] = useState<Goal | null>(null);
+
+  useEffect(() => {
+    const fetchGoals = async () => {
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        // Fetch Goals & Recent Checkins (Fast)
+        const response = await fetch(`${apiUrl}/api/goals?userId=neo`);
+        const data = await response.json();
+        const mappedGoals = data.goals.map((g: any) => {
+          const cat = CATEGORIES.find(c => c.id === g.category) || CATEGORIES[2];
+          return {
+            id: g.id,
+            title: g.title,
+            progress: 0,
+            icon: cat.icon,
+            category: cat.name
+          };
+        });
+        setGoals(mappedGoals);
+
+        const checkinsResponse = await fetch(`${apiUrl}/api/checkins/recent?userId=neo`);
+        const checkinsData = await checkinsResponse.json();
+        setRecentCheckins(checkinsData.checkins || []);
+        
+        // Goals are ready, show dashboard
+        setIsInitialLoading(false); 
+
+        // Fetch Motivation Insights (Slower, AI-driven)
+        setIsMotivationLoading(true);
+        const insightsResponse = await fetch(`${apiUrl}/api/insights/motivation?userId=neo`);
+        if (insightsResponse.ok) {
+          const insightsData = await insightsResponse.json();
+          setMotivationLevel(insightsData.level);
+          setDailyPulseMessage(insightsData.message);
+        }
+
+      } catch (error) {
+        console.error("Error fetching data:", error);
+      } finally {
+        setIsInitialLoading(false);
+        setIsMotivationLoading(false);
+      }
+    };
+
+    fetchGoals();
+  }, [refreshKey]);
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
@@ -73,7 +141,24 @@ export default function Home() {
             <h2 className="text-2xl font-bold text-[#121217] dark:text-white">Good morning, Alex!</h2>
             <p className="text-sm text-primary font-medium">Ready to crush your goals?</p>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="hidden xl:flex items-center gap-2 mr-6">
+            <Link href="/chat" className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">
+              <span className="material-symbols-outlined text-[20px]">chat_bubble</span>
+              <span>Chat</span>
+            </Link>
+            <button
+              onClick={() => setIsAddResolutionOpen(true)}
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+            >
+              <span className="material-symbols-outlined text-[20px]">add_circle</span>
+              <span>New Resolution</span>
+            </button>
+            <Link href="/insights" className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">
+              <span className="material-symbols-outlined text-[20px]">bar_chart</span>
+              <span>Stats</span>
+            </Link>
+          </div>
+          <div className="flex items-center gap-4 border-l border-gray-100 dark:border-gray-800 pl-6">
             <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">
               <span className="material-symbols-outlined">notifications</span>
             </button>
@@ -86,66 +171,92 @@ export default function Home() {
         <main className="p-4 lg:p-8 max-w-7xl mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
-              <div className="bg-white dark:bg-white/5 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-black/5 dark:border-white/10 overflow-hidden">
+              <div className="bg-white dark:bg-white/5 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-black/5 dark:border-white/10 overflow-hidden min-h-[300px]">
                 <div className="relative w-full h-48 bg-gradient-to-br from-amber-50 to-amber-100 dark:from-amber-900/20 dark:to-amber-800/20 flex items-center justify-center overflow-hidden">
                   <div className="absolute inset-0 opacity-20" style={{ backgroundImage: "radial-gradient(circle at 2px 2px, #F59E0B 1px, transparent 0)", backgroundSize: "24px 24px" }}></div>
                   <div className="flex flex-col items-center">
-                    <span className="text-amber-accent font-bold text-6xl">85%</span>
+                    {isMotivationLoading ? (
+                      <div className="h-16 w-32 bg-amber-500/10 dark:bg-amber-500/20 rounded-xl animate-pulse backdrop-blur-sm mb-1"></div>
+                    ) : (
+                      <span className="text-amber-accent font-bold text-6xl animate-in fade-in zoom-in duration-300">{motivationLevel}%</span>
+                    )}
                     <span className="text-amber-accent/80 text-sm uppercase tracking-widest font-bold mt-2">Motivation Level</span>
                   </div>
                 </div>
                 <div className="p-6">
                   <div className="flex flex-col gap-2 mb-4">
                     <p className="text-xl font-bold text-[#121217] dark:text-white">Daily Pulse</p>
-                    <p className="text-gray-500 dark:text-gray-400">Your energy is high today. You&apos;ve stayed consistent for <span className="text-primary font-bold">5 days</span> straight!</p>
+                    {isMotivationLoading ? (
+                      <div className="space-y-2 animate-pulse py-1 max-w-[90%]">
+                        <div className="h-4 bg-gray-100 dark:bg-gray-800 rounded w-full"></div>
+                        <div className="h-4 bg-gray-100 dark:bg-gray-800 rounded w-2/3"></div>
+                      </div>
+                    ) : (
+                      <p className="text-gray-500 dark:text-gray-400 animate-in fade-in slide-in-from-bottom-2 duration-500 leading-relaxed">
+                        {dailyPulseMessage || "Calculating your vibe..."}
+                      </p>
+                    )}
                   </div>
-                  <Link href="/chat" className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-primary text-white rounded-xl font-bold shadow-lg shadow-primary/20 hover:bg-[#4338ca] transition-all">
+                  <button
+                    onClick={() => setIsGoalSelectorOpen(true)}
+                    className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-primary text-white rounded-xl font-bold shadow-lg shadow-primary/20 hover:bg-[#4338ca] transition-all"
+                  >
                     <span className="material-symbols-outlined">check_circle</span>
                     <span>Quick Check-in</span>
-                  </Link>
+                  </button>
                 </div>
               </div>
 
-              <div className="bg-white dark:bg-white/5 rounded-2xl shadow-sm border border-black/5 dark:border-white/10 p-6">
+              <div className="bg-white dark:bg-white/5 rounded-2xl shadow-sm border border-black/5 dark:border-white/10 p-6 min-h-[200px]">
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="text-xl font-bold text-[#121217] dark:text-white">Your Resolutions</h3>
                   <Link href="/goals" className="text-primary text-sm font-bold hover:underline">See all</Link>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {goals.map((goal) => (
-                    <div key={goal.id} className="flex flex-col gap-3 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-100 dark:border-gray-700">
-                      <div className="relative size-20 mx-auto">
-                        <svg className="size-full -rotate-90" viewBox="0 0 36 36">
-                          <circle className="stroke-gray-200 dark:stroke-gray-700" cx="18" cy="18" fill="none" r="16" strokeWidth="3"></circle>
-                          <circle 
-                            className="stroke-primary" 
-                            cx="18" 
-                            cy="18" 
-                            fill="none" 
-                            r="16" 
-                            strokeDasharray="100" 
-                            strokeDashoffset={100 - goal.progress} 
-                            strokeLinecap="round" 
-                            strokeWidth="3"
-                          ></circle>
-                        </svg>
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <span className="material-symbols-outlined text-primary text-2xl">{goal.icon}</span>
+                
+                {isInitialLoading && goals.length === 0 ? (
+                  <div className="flex justify-center p-8">
+                    <span className="material-symbols-outlined animate-spin text-primary text-3xl">progress_activity</span>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {goals.map((goal) => (
+                      <div key={goal.id} className="flex flex-col gap-3 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-100 dark:border-gray-700">
+                        <div className="relative size-20 mx-auto">
+                          <svg className="size-full -rotate-90" viewBox="0 0 36 36">
+                            <circle className="stroke-gray-200 dark:stroke-gray-700" cx="18" cy="18" fill="none" r="16" strokeWidth="3"></circle>
+                            <circle
+                              className="stroke-primary"
+                              cx="18"
+                              cy="18"
+                              fill="none"
+                              r="16"
+                              strokeDasharray="100"
+                              strokeDashoffset={100 - goal.progress}
+                              strokeLinecap="round"
+                              strokeWidth="3"
+                            ></circle>
+                          </svg>
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <span className="material-symbols-outlined text-primary text-2xl">{goal.icon}</span>
+                          </div>
+                        </div>
+                        <div className="text-center">
+                          <p className="font-bold text-[#121217] dark:text-white">{goal.title}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wider mt-1">{goal.category}</p>
                         </div>
                       </div>
-                      <div className="text-center">
-                        <p className="font-bold text-[#121217] dark:text-white">{goal.title}</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wider mt-1">{goal.category}</p>
+                    ))}
+                    <button
+                      onClick={() => setIsAddResolutionOpen(true)}
+                      className="flex flex-col items-center justify-center gap-3 p-4 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl hover:border-primary hover:bg-primary/5 transition-all cursor-pointer min-h-[140px]"
+                    >
+                      <div className="size-12 rounded-full bg-primary/10 flex items-center justify-center">
+                        <span className="material-symbols-outlined text-primary text-2xl">add</span>
                       </div>
-                    </div>
-                  ))}
-                  <Link href="/goals" className="flex flex-col items-center justify-center gap-3 p-4 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl hover:border-primary hover:bg-primary/5 transition-all cursor-pointer min-h-[140px]">
-                    <div className="size-12 rounded-full bg-primary/10 flex items-center justify-center">
-                      <span className="material-symbols-outlined text-primary text-2xl">add</span>
-                    </div>
-                    <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Add New Goal</span>
-                  </Link>
-                </div>
+                      <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Add New Goal</span>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -162,39 +273,6 @@ export default function Home() {
                   View Detail Report
                   <span className="material-symbols-outlined text-lg">arrow_forward</span>
                 </Link>
-              </div>
-
-              <div className="bg-white dark:bg-white/5 rounded-2xl shadow-sm border border-black/5 dark:border-white/10 p-6">
-                <h4 className="font-bold text-[#121217] dark:text-white mb-4">Quick Actions</h4>
-                <div className="space-y-3">
-                  <Link href="/chat" className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                    <div className="size-10 rounded-full bg-primary/10 flex items-center justify-center">
-                      <span className="material-symbols-outlined text-primary">chat_bubble</span>
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium text-[#121217] dark:text-white">Start Chat</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">Talk to your AI coach</p>
-                    </div>
-                  </Link>
-                  <Link href="/goals" className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                    <div className="size-10 rounded-full bg-amber-accent/10 flex items-center justify-center">
-                      <span className="material-symbols-outlined text-amber-accent">add_circle</span>
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium text-[#121217] dark:text-white">New Resolution</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">Set a new goal</p>
-                    </div>
-                  </Link>
-                  <Link href="/insights" className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                    <div className="size-10 rounded-full bg-emerald-accent/10 flex items-center justify-center">
-                      <span className="material-symbols-outlined text-emerald-accent">bar_chart</span>
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium text-[#121217] dark:text-white">View Stats</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">Check your progress</p>
-                    </div>
-                  </Link>
-                </div>
               </div>
 
               <div className="bg-white dark:bg-white/5 rounded-2xl shadow-sm border border-black/5 dark:border-white/10 p-6">
@@ -216,6 +294,47 @@ export default function Home() {
                   </div>
                 </div>
               </div>
+
+              <div className="bg-white dark:bg-white/5 rounded-2xl shadow-sm border border-black/5 dark:border-white/10 p-6">
+                <h4 className="font-bold text-[#121217] dark:text-white mb-4">Recent Check-ins</h4>
+                {recentCheckins.length === 0 ? (
+                  <p className="text-sm text-gray-500 dark:text-gray-400">No check-ins yet.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {recentCheckins.map((checkin) => {
+                      const checkinDate = new Date(checkin.date);
+                      const today = new Date();
+                      const yesterday = new Date(today);
+                      yesterday.setDate(yesterday.getDate() - 1);
+
+                      let dateDisplay = checkinDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+                      if (checkinDate.toDateString() === today.toDateString()) {
+                        dateDisplay = "Today";
+                      } else if (checkinDate.toDateString() === yesterday.toDateString()) {
+                        dateDisplay = "Yesterday";
+                      }
+
+                      return (
+                        <div key={checkin.id} className="flex items-start gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700">
+                          <div className={`mt-1 size-8 rounded-full flex items-center justify-center shrink-0 ${checkin.mood === 'GREAT' ? 'bg-green-100 text-green-600' : checkin.mood === 'OKAY' ? 'bg-blue-100 text-blue-600' : 'bg-red-100 text-red-600'}`}>
+                            <span className="material-symbols-outlined text-sm">
+                              {checkin.mood === 'GREAT' ? 'sentiment_very_satisfied' : checkin.mood === 'OKAY' ? 'sentiment_neutral' : 'sentiment_dissatisfied'}
+                            </span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex justify-between items-start">
+                              <p className="font-bold text-[#121217] dark:text-white text-sm truncate pr-2">{checkin.goalTitle}</p>
+                              <span className="text-[10px] text-gray-400 whitespace-nowrap mt-0.5">{dateDisplay}</span>
+                            </div>
+                            <p className="text-gray-600 dark:text-gray-400 text-xs mt-0.5 line-clamp-2 leading-relaxed">{checkin.response}</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </main>
@@ -231,12 +350,12 @@ export default function Home() {
             <span className="material-symbols-outlined">forum</span>
             <span className="text-[10px] font-bold">Pulse AI</span>
           </Link>
-          <Link href="/goals" className="flex flex-col items-center gap-1 text-gray-400">
+          <button onClick={() => setIsAddResolutionOpen(true)} className="flex flex-col items-center gap-1 text-gray-400">
             <div className="size-6 bg-primary rounded-full flex items-center justify-center text-white">
               <span className="material-symbols-outlined text-sm">add</span>
             </div>
             <span className="text-[10px] font-bold">Action</span>
-          </Link>
+          </button>
           <Link href="/insights" className="flex flex-col items-center gap-1 text-gray-400">
             <span className="material-symbols-outlined">analytics</span>
             <span className="text-[10px] font-bold">Stats</span>
@@ -247,6 +366,35 @@ export default function Home() {
           </div>
         </div>
       </nav>
-    </div>
+      <AddResolutionModal
+        isOpen={isAddResolutionOpen}
+        onClose={() => setIsAddResolutionOpen(false)}
+        onGoalCreated={() => setRefreshKey(prev => prev + 1)}
+      />
+
+      <GoalSelectorModal
+        isOpen={isGoalSelectorOpen}
+        onClose={() => setIsGoalSelectorOpen(false)}
+        goals={goals}
+        onGoalSelect={(goal) => {
+          setSelectedGoalForCheckin(goal);
+          setIsGoalSelectorOpen(false);
+        }}
+      />
+
+      {
+        selectedGoalForCheckin && (
+          <CheckInModal
+            isOpen={true}
+            onClose={() => setSelectedGoalForCheckin(null)}
+            goalId={selectedGoalForCheckin.id}
+            goalTitle={selectedGoalForCheckin.title}
+            onCheckInComplete={() => {
+              setSelectedGoalForCheckin(null);
+            }}
+          />
+        )
+      }
+    </div >
   );
 }

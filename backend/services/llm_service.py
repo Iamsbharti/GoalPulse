@@ -9,6 +9,7 @@ class LLMService:
         # 'production' -> openai
         # anything else -> ollama (local)
         app_env = os.getenv("APP_ENV", "local")
+       
         
         if app_env == "production":
             self.provider = "openai"
@@ -19,7 +20,9 @@ class LLMService:
     
     def _get_client(self):
         if self.provider == "ollama":
-            return ChatOllama(model="minimax-m2:cloud", base_url="http://localhost:11434")
+             # local_model='minimax-m2:cloud'
+            local_model='gpt-oss:20b'
+            return ChatOllama(model=local_model, base_url="http://localhost:11434")
         elif self.provider == "openai":
             api_key = os.getenv("OPENAI_API_KEY")
             return ChatOpenAI(model="gpt-5.2", api_key=api_key)

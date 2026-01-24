@@ -45,16 +45,27 @@ class Goal(Base):
     user: Mapped["User"] = relationship("User", back_populates="goals")
     checkins: Mapped[List["Checkin"]] = relationship("Checkin", back_populates="goal", cascade="all, delete-orphan")
 
+class CheckinProgress:
+    YES = "YES"
+    NO = "NO"
+    PARTIAL = "PARTIAL"
+
+class CheckinMood:
+    GREAT = "GREAT"
+    OKAY = "OKAY"
+    LOW = "LOW"
+
 class Checkin(Base):
     __tablename__ = "checkins"
-    
+
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     goal_id: Mapped[str] = mapped_column(String(36), ForeignKey("goals.id", ondelete="CASCADE"), nullable=False)
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    response: Mapped[str] = mapped_column(Text, nullable=False)
-    mood: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    progress: Mapped[str] = mapped_column(String(20), nullable=False)  # YES | NO | PARTIAL
+    mood: Mapped[str] = mapped_column(String(20), nullable=False)      # GREAT | OKAY | LOW
+    response: Mapped[str] = mapped_column(Text, nullable=False)        # free text
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    
+
     goal: Mapped["Goal"] = relationship("Goal", back_populates="checkins")
     user: Mapped["User"] = relationship("User", back_populates="checkins")
 
