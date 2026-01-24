@@ -55,7 +55,7 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const mainContainerRef = useRef<HTMLElement>(null);
   const inputRef = useRef(input);
-  
+
   useEffect(() => {
     inputRef.current = input;
   }, [input]);
@@ -106,11 +106,11 @@ export default function ChatPage() {
 
   const initializeChat = async () => {
     if (hasInitialized) return;
-    
+
     setIsLoading(true);
     try {
       const storedMessages = localStorage.getItem(STORAGE_KEY);
-      
+
       if (storedMessages) {
         try {
           const parsedMessages = JSON.parse(storedMessages);
@@ -128,7 +128,7 @@ export default function ChatPage() {
       }
 
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-      
+
       await Promise.all([
         fetchGoals(),
         fetch(`${apiUrl}/api/chat`, {
@@ -225,9 +225,9 @@ export default function ChatPage() {
     }
   }, [isSending, selectedGoal]);
 
-  const selectedGoalData = useMemo(() => 
+  const selectedGoalData = useMemo(() =>
     goals.find(g => g.id === selectedGoal) || null
-  , [goals, selectedGoal]);
+    , [goals, selectedGoal]);
 
   return (
     <div className="min-h-screen bg-background-light dark:bg-background-dark flex">
@@ -265,7 +265,7 @@ export default function ChatPage() {
             </div>
             {isSidebarOpen && (
               <div className="flex-1">
-                <p className="text-sm font-medium text-[#121217] dark:text-white">Alex</p>
+                <p className="text-sm font-medium text-[#121217] dark:text-white">Neo</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">Pro Member</p>
               </div>
             )}
@@ -292,7 +292,7 @@ export default function ChatPage() {
           </div>
           <div className="flex-1"></div>
           <div className="flex items-center gap-2">
-            <button 
+            <button
               onClick={clearChat}
               className="flex items-center gap-2 px-3 py-2 text-sm text-[#686586] dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
             >
@@ -311,11 +311,10 @@ export default function ChatPage() {
               <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
                 <button
                   onClick={() => setSelectedGoal(null)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap ${
-                    selectedGoal === null
+                  className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap ${selectedGoal === null
                       ? "bg-primary text-white"
                       : "bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 hover:border-primary/50"
-                  }`}
+                    }`}
                 >
                   <span className="material-symbols-outlined text-sm">all_inclusive</span>
                   All Goals
@@ -324,11 +323,10 @@ export default function ChatPage() {
                   <button
                     key={goal.id}
                     onClick={() => setSelectedGoal(goal.id)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap ${
-                      selectedGoal === goal.id
+                    className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap ${selectedGoal === goal.id
                         ? "bg-primary text-white"
                         : "bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 hover:border-primary/50"
-                    }`}
+                      }`}
                   >
                     <span className="material-symbols-outlined text-sm">track_changes</span>
                     {goal.title.length > 15 ? goal.title.substring(0, 15) + "..." : goal.title}
@@ -341,75 +339,75 @@ export default function ChatPage() {
           <ErrorBoundary>
             <main ref={mainContainerRef} className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-6 no-scrollbar">
               {isLoading ? (
-              <div className="flex flex-col items-center justify-center h-full space-y-4">
-                <div className="relative">
-                  <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-                    <div className="w-full h-full bg-gradient-to-tr from-primary to-indigo-300 opacity-80 animate-pulse"></div>
-                  </div>
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <Loader2 className="animate-spin text-primary" size={24} />
-                  </div>
-                </div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Loading your conversation...</p>
-              </div>
-            ) : (
-              <>
-                {messages.length === 0 && (
-                  <div className="flex flex-col items-center justify-center h-full space-y-4">
+                <div className="flex flex-col items-center justify-center h-full space-y-4">
+                  <div className="relative">
                     <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-                      <span className="material-symbols-outlined text-primary text-3xl">forum</span>
+                      <div className="w-full h-full bg-gradient-to-tr from-primary to-indigo-300 opacity-80 animate-pulse"></div>
                     </div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Start a conversation with Coach Aura</p>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <Loader2 className="animate-spin text-primary" size={24} />
+                    </div>
                   </div>
-                )}
-                {messages.map((message) => (
-                  <div key={message.id} className={`flex flex-col ${message.role === "user" ? "items-end" : "items-start"}`}>
-                    {message.role === "assistant" && (
-                      <div className="flex items-start gap-4 w-full max-w-3xl">
-                        <div className="bg-primary/10 dark:bg-primary/20 aspect-square rounded-full w-10 h-10 shrink-0 flex items-center justify-center overflow-hidden border border-primary/20 mt-1">
-                          <div className="w-full h-full bg-gradient-to-tr from-primary to-indigo-300 opacity-80"></div>
-                        </div>
-                        <div className="flex flex-col gap-1 items-start">
-                          <p className="text-[#686586] dark:text-gray-400 text-xs font-bold uppercase tracking-widest ml-1">Coach Aura</p>
-                          <div className="bg-white dark:bg-gray-800 text-[#121217] dark:text-white text-base font-normal leading-relaxed rounded-2xl rounded-tl-none px-5 py-4 shadow-sm border border-gray-100 dark:border-gray-700">
-                            <ReactMarkdown
-                              components={{
-                                p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                                ul: ({ children }) => <ul className="list-disc list-inside mb-2">{children}</ul>,
-                                ol: ({ children }) => <ol className="list-decimal list-inside mb-2">{children}</ol>,
-                                li: ({ children }) => <li className="mb-1">{children}</li>,
-                                strong: ({ children }) => <strong className="font-bold">{children}</strong>,
-                              }}
-                            >
-                              {message.content}
-                            </ReactMarkdown>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Loading your conversation...</p>
+                </div>
+              ) : (
+                <>
+                  {messages.length === 0 && (
+                    <div className="flex flex-col items-center justify-center h-full space-y-4">
+                      <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+                        <span className="material-symbols-outlined text-primary text-3xl">forum</span>
+                      </div>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">Start a conversation with Coach Aura</p>
+                    </div>
+                  )}
+                  {messages.map((message) => (
+                    <div key={message.id} className={`flex flex-col ${message.role === "user" ? "items-end" : "items-start"}`}>
+                      {message.role === "assistant" && (
+                        <div className="flex items-start gap-4 w-full max-w-3xl">
+                          <div className="bg-primary/10 dark:bg-primary/20 aspect-square rounded-full w-10 h-10 shrink-0 flex items-center justify-center overflow-hidden border border-primary/20 mt-1">
+                            <div className="w-full h-full bg-gradient-to-tr from-primary to-indigo-300 opacity-80"></div>
+                          </div>
+                          <div className="flex flex-col gap-1 items-start">
+                            <p className="text-[#686586] dark:text-gray-400 text-xs font-bold uppercase tracking-widest ml-1">Coach Aura</p>
+                            <div className="bg-white dark:bg-gray-800 text-[#121217] dark:text-white text-base font-normal leading-relaxed rounded-2xl rounded-tl-none px-5 py-4 shadow-sm border border-gray-100 dark:border-gray-700">
+                              <ReactMarkdown
+                                components={{
+                                  p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                                  ul: ({ children }) => <ul className="list-disc list-inside mb-2">{children}</ul>,
+                                  ol: ({ children }) => <ol className="list-decimal list-inside mb-2">{children}</ol>,
+                                  li: ({ children }) => <li className="mb-1">{children}</li>,
+                                  strong: ({ children }) => <strong className="font-bold">{children}</strong>,
+                                }}
+                              >
+                                {message.content}
+                              </ReactMarkdown>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    )}
-                    {message.role === "user" && (
-                      <div className="flex flex-col items-end gap-1 max-w-2xl">
-                        <div className="bg-primary text-white px-5 py-3 rounded-2xl rounded-tr-none shadow-sm">
-                          <p className="text-sm">{message.content}</p>
+                      )}
+                      {message.role === "user" && (
+                        <div className="flex flex-col items-end gap-1 max-w-2xl">
+                          <div className="bg-primary text-white px-5 py-3 rounded-2xl rounded-tr-none shadow-sm">
+                            <p className="text-sm">{message.content}</p>
+                          </div>
+                          <span className="text-[10px] text-gray-400 mr-1">
+                            {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
                         </div>
-                        <span className="text-[10px] text-gray-400 mr-1">
-                          {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                ))}
-                {isSending && (
-                  <div className="flex items-center gap-1 ml-14">
-                    <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce"></div>
-                    <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                    <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                  </div>
-                )}
-                <div ref={messagesEndRef} />
-              </>
-            )}
-          </main>
+                      )}
+                    </div>
+                  ))}
+                  {isSending && (
+                    <div className="flex items-center gap-1 ml-14">
+                      <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce"></div>
+                      <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                      <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                    </div>
+                  )}
+                  <div ref={messagesEndRef} />
+                </>
+              )}
+            </main>
           </ErrorBoundary>
 
           <div className="p-4 lg:p-6 border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-[#121217]">
@@ -424,7 +422,7 @@ export default function ChatPage() {
                 </button>
               </div>
             )}
-            
+
             <div className="flex gap-2 overflow-x-auto no-scrollbar pb-3 mb-3">
               {quickReplies.map((reply) => (
                 <button

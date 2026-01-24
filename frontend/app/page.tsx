@@ -62,9 +62,9 @@ export default function Home() {
         const checkinsResponse = await fetch(`${apiUrl}/api/checkins/recent?userId=neo`);
         const checkinsData = await checkinsResponse.json();
         setRecentCheckins(checkinsData.checkins || []);
-        
+
         // Goals are ready, show dashboard
-        setIsInitialLoading(false); 
+        setIsInitialLoading(false);
 
         // Fetch Motivation Insights (Slower, AI-driven)
         setIsMotivationLoading(true);
@@ -124,7 +124,7 @@ export default function Home() {
             </div>
             {isSidebarOpen && (
               <div className="flex-1">
-                <p className="text-sm font-medium text-[#121217] dark:text-white">Alex</p>
+                <p className="text-sm font-medium text-[#121217] dark:text-white">Neo</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">Pro Member</p>
               </div>
             )}
@@ -138,7 +138,7 @@ export default function Home() {
             <span className="material-symbols-outlined">menu</span>
           </button>
           <div className="flex-1">
-            <h2 className="text-2xl font-bold text-[#121217] dark:text-white">Good morning, Alex!</h2>
+            <h2 className="text-2xl font-bold text-[#121217] dark:text-white">Good morning, Neo!</h2>
             <p className="text-sm text-primary font-medium">Ready to crush your goals?</p>
           </div>
           <div className="hidden xl:flex items-center gap-2 mr-6">
@@ -212,7 +212,7 @@ export default function Home() {
                   <h3 className="text-xl font-bold text-[#121217] dark:text-white">Your Resolutions</h3>
                   <Link href="/goals" className="text-primary text-sm font-bold hover:underline">See all</Link>
                 </div>
-                
+
                 {isInitialLoading && goals.length === 0 ? (
                   <div className="flex justify-center p-8">
                     <span className="material-symbols-outlined animate-spin text-primary text-3xl">progress_activity</span>

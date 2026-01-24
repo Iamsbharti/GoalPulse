@@ -41,7 +41,7 @@ export default function InsightsPage() {
             </div>
             {isSidebarOpen && (
               <div className="flex-1">
-                <p className="text-sm font-medium text-[#121217] dark:text-white">Alex</p>
+                <p className="text-sm font-medium text-[#121217] dark:text-white">Neo</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">Pro Member</p>
               </div>
             )}
