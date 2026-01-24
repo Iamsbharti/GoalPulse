@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Loader2, X } from "lucide-react";
+import { MOOD_LIST, MOODS } from "@/lib/mood-constants";
 
 interface CheckInModalProps {
   isOpen: boolean;
@@ -11,17 +12,9 @@ interface CheckInModalProps {
   onCheckInComplete: () => void;
 }
 
-const moods = [
-  { value: "1", emoji: "😫", label: "Overwhelmed" },
-  { value: "2", emoji: "😕", label: "Frustrated" },
-  { value: "3", emoji: "😐", label: "Okay" },
-  { value: "4", emoji: "🙂", label: "Good" },
-  { value: "5", emoji: "🤩", label: "Great" },
-];
-
 export function CheckInModal({ isOpen, onClose, goalId, goalTitle, onCheckInComplete }: CheckInModalProps) {
   const [progress, setProgress] = useState("YES");
-  const [mood, setMood] = useState("4");
+  const [mood, setMood] = useState<string>(MOODS.GOOD.value);
   const [response, setResponse] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -77,15 +70,14 @@ export function CheckInModal({ isOpen, onClose, goalId, goalTitle, onCheckInComp
                 <button
                   key={option}
                   onClick={() => setProgress(option)}
-                  className={`flex-1 py-3 px-4 rounded-xl text-sm font-bold transition-all ${
-                    progress === option
-                      ? option === "YES"
-                        ? "bg-green-500 text-white shadow-lg shadow-green-500/25"
-                        : option === "PARTIAL"
+                  className={`flex-1 py-3 px-4 rounded-xl text-sm font-bold transition-all ${progress === option
+                    ? option === "YES"
+                      ? "bg-green-500 text-white shadow-lg shadow-green-500/25"
+                      : option === "PARTIAL"
                         ? "bg-yellow-500 text-white shadow-lg shadow-yellow-500/25"
                         : "bg-red-500 text-white shadow-lg shadow-red-500/25"
-                      : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
-                  }`}
+                    : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+                    }`}
                 >
                   {option}
                 </button>
@@ -98,15 +90,14 @@ export function CheckInModal({ isOpen, onClose, goalId, goalTitle, onCheckInComp
               How did it feel?
             </label>
             <div className="flex justify-between bg-[#f0f0f4] dark:bg-gray-800 p-3 rounded-xl">
-              {moods.map((m) => (
+              {MOOD_LIST.map((m) => (
                 <button
                   key={m.value}
                   onClick={() => setMood(m.value)}
-                  className={`w-12 h-12 flex items-center justify-center rounded-full transition-all ${
-                    mood === m.value
-                      ? "bg-white dark:bg-gray-700 shadow-sm scale-110"
-                      : "hover:bg-white/30 dark:hover:bg-white/10 filter grayscale hover:grayscale-0"
-                  }`}
+                  className={`w-12 h-12 flex items-center justify-center rounded-full transition-all ${mood === m.value
+                    ? "bg-white dark:bg-gray-700 shadow-sm scale-110"
+                    : "hover:bg-white/30 dark:hover:bg-white/10 filter grayscale hover:grayscale-0"
+                    }`}
                   title={m.label}
                 >
                   <span className="text-2xl">{m.emoji}</span>
@@ -114,7 +105,7 @@ export function CheckInModal({ isOpen, onClose, goalId, goalTitle, onCheckInComp
               ))}
             </div>
             <p className="text-center text-sm text-gray-500 dark:text-gray-400 mt-2">
-              {moods.find((m) => m.value === mood)?.label}
+              {MOOD_LIST.find((m) => m.value === mood)?.label}
             </p>
           </div>
 

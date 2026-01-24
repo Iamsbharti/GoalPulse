@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { CATEGORIES } from "@/lib/constants";
+import { getMoodConfig } from "@/lib/mood-constants";
 import { AddResolutionModal } from "@/components/AddResolutionModal";
 import { GoalSelectorModal } from "@/components/GoalSelectorModal";
 import { CheckInModal } from "@/components/CheckInModal";
@@ -315,11 +316,13 @@ export default function Home() {
                         dateDisplay = "Yesterday";
                       }
 
+                      const moodConfig = getMoodConfig(checkin.mood);
+
                       return (
                         <div key={checkin.id} className="flex items-start gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700">
-                          <div className={`mt-1 size-8 rounded-full flex items-center justify-center shrink-0 ${checkin.mood === 'GREAT' ? 'bg-green-100 text-green-600' : checkin.mood === 'OKAY' ? 'bg-blue-100 text-blue-600' : 'bg-red-100 text-red-600'}`}>
+                          <div className={`mt-1 size-8 rounded-full flex items-center justify-center shrink-0 ${moodConfig.color}`}>
                             <span className="material-symbols-outlined text-sm">
-                              {checkin.mood === 'GREAT' ? 'sentiment_very_satisfied' : checkin.mood === 'OKAY' ? 'sentiment_neutral' : 'sentiment_dissatisfied'}
+                              {moodConfig.icon}
                             </span>
                           </div>
                           <div className="flex-1 min-w-0">

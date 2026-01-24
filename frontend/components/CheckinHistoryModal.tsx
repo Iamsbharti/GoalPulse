@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { Loader2, X } from "lucide-react";
+import { getMoodConfig } from "@/lib/mood-constants";
 
 interface Checkin {
   id: string;
@@ -19,19 +20,6 @@ interface CheckinHistoryModalProps {
   goalId: string;
   goalTitle: string;
 }
-
-const moodEmojis: Record<string, string> = {
-  "1": "😫",
-  "2": "😕",
-  "3": "😐",
-  "4": "🙂",
-  "5": "🤩",
-  GREAT: "🤩",
-  GOOD: "🙂",
-  OKAY: "😐",
-  FRUSTRATED: "😕",
-  OVERWHELMED: "😫",
-};
 
 export function CheckinHistoryModal({ isOpen, onClose, goalId, goalTitle }: CheckinHistoryModalProps) {
   const [checkins, setCheckins] = useState<Checkin[]>([]);
@@ -83,19 +71,6 @@ export function CheckinHistoryModal({ isOpen, onClose, goalId, goalTitle }: Chec
     }
   };
 
-  const getMoodEmoji = (mood: string) => {
-    switch (mood) {
-      case "GREAT":
-        return "😊";
-      case "OKAY":
-        return "😐";
-      case "LOW":
-        return "😔";
-      default:
-        return "😐";
-    }
-  };
-
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     return date.toLocaleDateString("en-US", {
@@ -140,27 +115,30 @@ export function CheckinHistoryModal({ isOpen, onClose, goalId, goalTitle }: Chec
             </div>
           ) : (
             <div className="space-y-4">
-              {checkins.map((checkin) => (
-                <div
-                  key={checkin.id}
-                  className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 border border-gray-100 dark:border-gray-700"
-                >
-                  <div className="flex items-center gap-3 mb-3">
-                    <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${getProgressColor(checkin.progress)}`}>
-                      {checkin.progress}
-                    </span>
-                    <span className="text-sm text-gray-500 dark:text-gray-400">
-                      {getMoodEmoji(checkin.mood)} {checkin.mood}
-                    </span>
-                    <span className="text-xs text-gray-400 ml-auto">
-                      {formatDate(checkin.created_at)}
-                    </span>
+              {checkins.map((checkin) => {
+                const moodConfig = getMoodConfig(checkin.mood);
+                return (
+                  <div
+                    key={checkin.id}
+                    className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 border border-gray-100 dark:border-gray-700"
+                  >
+                    <div className="flex items-center gap-3 mb-3">
+                      <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${getProgressColor(checkin.progress)}`}>
+                        {checkin.progress}
+                      </span>
+                      <span className="text-sm text-gray-500 dark:text-gray-400">
+                        {moodConfig.emoji} {moodConfig.label}
+                      </span>
+                      <span className="text-xs text-gray-400 ml-auto">
+                        {formatDate(checkin.created_at)}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                      {checkin.response}
+                    </p>
                   </div>
-                  <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
-                    {checkin.response}
-                  </p>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
