@@ -394,6 +394,7 @@ export default function Home() {
             goalTitle={selectedGoalForCheckin.title}
             onCheckInComplete={() => {
               setSelectedGoalForCheckin(null);
+              setRefreshKey(prev => prev + 1);
             }}
           />
         )
