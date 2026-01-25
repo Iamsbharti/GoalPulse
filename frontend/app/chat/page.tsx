@@ -427,7 +427,7 @@ export default function ChatPage() {
         <div className="flex-1 flex flex-col max-w-5xl mx-auto w-full">
           {goals.length > 0 && (
             <div className="px-4 lg:px-6 py-3 border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50">
-              <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+              {/* <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
                 <button
                   onClick={() => setSelectedGoal(null)}
                   className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap ${selectedGoal === null
@@ -451,7 +451,7 @@ export default function ChatPage() {
                     {goal.title.length > 15 ? goal.title.substring(0, 15) + "..." : goal.title}
                   </button>
                 ))}
-              </div>
+              </div> */}
             </div>
           )}
 
@@ -604,7 +604,7 @@ export default function ChatPage() {
               </div>
             )}
 
-            <div className="flex gap-2 overflow-x-auto no-scrollbar pb-3 mb-3">
+            {/* <div className="flex gap-2 overflow-x-auto no-scrollbar pb-3 mb-3">
               {quickReplies.map((reply) => (
                 <button
                   key={reply.id}
@@ -615,7 +615,7 @@ export default function ChatPage() {
                   <p className="text-primary dark:text-indigo-300 text-sm font-semibold">{reply.text}</p>
                 </button>
               ))}
-            </div>
+            </div> */}
             <div className="flex items-center gap-3 bg-gray-100 dark:bg-gray-800 rounded-2xl px-4 py-3 focus-within:ring-2 focus-within:ring-primary/30 transition-all">
               <button className="text-[#686586] dark:text-gray-400 hover:text-primary transition-colors">
                 <span className="material-symbols-outlined text-2xl">add_circle</span>
