@@ -10,3 +10,4 @@ pydantic-settings
 langchain
 langchain-ollama
 langchain-openai
+langgraph

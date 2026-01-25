@@ -1,9 +1,10 @@
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from services.llm_service import LLMService
 from services.goals_service import GoalsService
+from agents.goal_creation_agent import goal_creation_agent
 from models.database import get_db
 
 router = APIRouter()
@@ -12,6 +13,18 @@ class ChatRequest(BaseModel):
     message: str
     userId: str = "neo"
     goalId: Optional[str] = None
+
+class ProcessGoalMessageRequest(BaseModel):
+    message: str
+    userId: str = "neo"
+    existing_goal_draft: Optional[Dict[str, Any]] = None
+
+class CreateGoalFromChatRequest(BaseModel):
+    title: str
+    description: str
+    category: str
+    checkin_frequency_days: int = 3
+    userId: str = "neo"
 
 class GenerateDescriptionRequest(BaseModel):
     title: str
@@ -33,10 +46,51 @@ class CreateCheckinRequest(BaseModel):
     response: str  # free text
 
 @router.post("/api/chat")
-async def chat(request: ChatRequest):
+async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Main chat endpoint using LangGraph for goal creation.
+    """
+    print(f"DEBUG - /api/chat called with message: {request.message}")
+    
+    # Process through LangGraph goal creation agent
+    result = await goal_creation_agent.process_message(
+        user_id=request.userId,
+        message=request.message
+    )
+    
+    print(f"DEBUG - LangGraph result: {result}")
+    
+    # If goal intent was detected, return the agent's response
+    if result.get("has_goal_intent"):
+        status = result.get("status", "collecting")
+        goal_draft = result.get("goal_draft")
+        
+        # Transform goal_draft to match frontend expectations
+        transformed_draft = None
+        if goal_draft:
+            transformed_draft = {
+                "title": goal_draft.get("title", ""),
+                "description": goal_draft.get("description", ""),
+                "category": goal_draft.get("category", "personal"),
+                "suggested_checkin_frequency_days": goal_draft.get("frequency_days", 3)
+            }
+        
+        return {
+            "has_goal_intent": True,
+            "message": result.get("response", ""),
+            "goal_draft": transformed_draft,
+            "goal_created": result.get("goal_created", False),
+            "status": status,
+            # Frontend expects these boolean flags
+            "needs_confirmation": status == "confirming",
+            "needs_clarification": status == "collecting",
+            "cancelled": status == "cancelled"
+        }
+    
+    # No goal intent - use normal chat
+    print(f"DEBUG - No goal intent, using normal chat")
     llm = LLMService()
     
-    # System prompt to define the app's identity and handle goal creation attempts
     system_prompt = f"""You are GoalPulse, an AI accountability partner.
 Current User: {request.userId}
 
@@ -47,20 +101,64 @@ About GoalPulse:
 
 Instructions:
 1. Answer questions about the app (what it offers, how it works).
-2. If the user wants to ADD A NEW GOAL:
-   - Acknowledge their intent.
-   - You CANNOT save goals to the database yet, but you can discuss them.
-   - Ask for a title and description if they are missing.
-   - If they provide details, say something like "That sounds like a great goal! I'll note that down (mentally) for now."
-3. If the user asks about existing goals, explain that you are currently in "Chat Only" mode and cannot access the database yet.
-4. Keep responses helpful, encouraging, and concise.
+2. Keep responses helpful, encouraging, and concise.
+3. If the user wants to create a goal, encourage them with phrases like "I want to..." or "My goal is..."
 
 User's Message: {request.message}
 """
-    
+
     response_text = await llm.generate(system_prompt)
-    
-    return {"response": response_text, "agent": "chat"}
+    print(f"DEBUG - Normal chat response: {response_text}")
+
+    return {"response": response_text, "agent": "chat", "has_goal_intent": False}
+
+@router.post("/api/goals/from-chat")
+async def create_goal_from_chat(request: CreateGoalFromChatRequest, db: AsyncSession = Depends(get_db)):
+    """Create a goal from chat after user confirmation."""
+    goals_service = GoalsService(db)
+    llm = LLMService()
+
+    # Validate inputs
+    if not request.title or not request.description:
+        raise HTTPException(status_code=400, detail="Title and description are required")
+
+    if request.category not in ["health", "productivity", "finance", "learning", "personal"]:
+        raise HTTPException(status_code=400, detail="Invalid category")
+
+    if request.checkin_frequency_days < 1 or request.checkin_frequency_days > 7:
+        raise HTTPException(status_code=400, detail="Check-in frequency must be between 1 and 7 days")
+
+    try:
+        # Create the goal
+        goal = await goals_service.create_goal(
+            user_id=request.userId,
+            title=request.title,
+            description=request.description,
+            category=request.category
+        )
+
+        # Generate acknowledgment message
+        ack_prompt = f"""You are an accountability coach. Acknowledge the creation of a new goal.
+Keep it motivating but grounded. Max 2 sentences, no emojis.
+
+Goal title: "{request.title}"
+"""
+        ack_message = await llm.generate(ack_prompt)
+
+        return {
+            "success": True,
+            "goal": {
+                "id": goal.id,
+                "title": goal.title,
+                "description": goal.description,
+                "category": goal.category,
+                "status": goal.status
+            },
+            "acknowledgment": ack_message.strip()
+        }
+    except Exception as e:
+        print(f"Error creating goal from chat: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/api/goals/generate-description")
 async def generate_description(request: GenerateDescriptionRequest):

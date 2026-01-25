@@ -20,8 +20,8 @@ class LLMService:
     
     def _get_client(self):
         if self.provider == "ollama":
-             # local_model='minimax-m2:cloud'
-            local_model='gpt-oss:20b'
+            local_model='minimax-m2:cloud'
+            # local_model='gpt-oss:20b'
             return ChatOllama(model=local_model, base_url="http://localhost:11434")
         elif self.provider == "openai":
             api_key = os.getenv("OPENAI_API_KEY")

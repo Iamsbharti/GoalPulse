@@ -25,6 +25,13 @@ interface Goal {
   status: string;
 }
 
+interface GoalDraft {
+  title: string;
+  description: string;
+  category: string;
+  suggested_checkin_frequency_days: number;
+}
+
 const quickReplies = [
   { id: "back_on_track", text: "I'm back on track 🏃", icon: "directions_run" },
   { id: "need_boost", text: "Need a boost ⚡", icon: "bolt" },
@@ -32,9 +39,6 @@ const quickReplies = [
   { id: "skip_today", text: "Skip for today ⏭️", icon: "schedule" },
   { id: "check_progress", text: "How am I doing? 📊", icon: "bar_chart" },
 ];
-
-const STORAGE_KEY = "goalpulse_chat_messages";
-const MAX_MESSAGES = 100;
 
 const DEFAULT_WELCOME_MESSAGE: Message = {
   id: "welcome",
@@ -56,6 +60,10 @@ export default function ChatPage() {
   const mainContainerRef = useRef<HTMLElement>(null);
   const inputRef = useRef(input);
 
+  // Goal creation state
+  const [pendingGoalDraft, setPendingGoalDraft] = useState<GoalDraft | null>(null);
+  const [isProcessingGoal, setIsProcessingGoal] = useState(false);
+
   useEffect(() => {
     inputRef.current = input;
   }, [input]);
@@ -63,13 +71,6 @@ export default function ChatPage() {
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
-
-  useEffect(() => {
-    if (messages.length > 0) {
-      const trimmedMessages = messages.slice(-MAX_MESSAGES);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmedMessages));
-    }
-  }, [messages]);
 
   useEffect(() => {
     if (messages.length > 0 && mainContainerRef.current) {
@@ -109,45 +110,13 @@ export default function ChatPage() {
 
     setIsLoading(true);
     try {
-      const storedMessages = localStorage.getItem(STORAGE_KEY);
-
-      if (storedMessages) {
-        try {
-          const parsedMessages = JSON.parse(storedMessages);
-          if (isValidMessagesArray(parsedMessages) && parsedMessages.length > 0) {
-            setMessages(parsedMessages.slice(-MAX_MESSAGES));
-            setHasInitialized(true);
-            await fetchGoals();
-            setIsLoading(false);
-            return;
-          }
-        } catch (parseError) {
-          console.warn('Invalid stored messages, clearing:', parseError);
-          localStorage.removeItem(STORAGE_KEY);
-        }
-      }
-
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-      await Promise.all([
-        fetchGoals(),
-        fetch(`${apiUrl}/api/chat`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            message: "Hello! I'm ready for our check-in.",
-            userId: "neo",
-          }),
-        }).then(res => res.json()).then(data => {
-          const welcomeMessage: Message = {
-            id: "welcome",
-            role: "assistant",
-            content: data.response || DEFAULT_WELCOME_MESSAGE.content,
-            timestamp: new Date().toISOString(),
-          };
-          setMessages([welcomeMessage]);
-        }),
-      ]);
+      // Fetch goals
+      await fetchGoals();
+
+      // Show welcome message
+      setMessages([DEFAULT_WELCOME_MESSAGE]);
 
       setHasInitialized(true);
     } catch (error) {
@@ -164,10 +133,154 @@ export default function ChatPage() {
   }, [initializeChat]);
 
   const clearChat = () => {
-    localStorage.removeItem(STORAGE_KEY);
-    setMessages([]);
-    setHasInitialized(false);
-    initializeChat();
+    setMessages([DEFAULT_WELCOME_MESSAGE]);
+    setPendingGoalDraft(null);
+  };
+
+  const processGoalMessage = async (messageText: string) => {
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const response = await fetch(`${apiUrl}/api/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: messageText,
+          userId: "neo",
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to process message");
+      }
+
+      const data = await response.json();
+
+      if (data.has_goal_intent) {
+        if (data.cancelled) {
+          setPendingGoalDraft(null);
+        }
+
+        if (data.goal_created && data.goal) {
+          // Goal was successfully created
+          setPendingGoalDraft(null);
+          await fetchGoals();
+
+          const ackMessage: Message = {
+            id: (Date.now() + 1).toString(),
+            role: "assistant",
+            content: data.message,
+            timestamp: new Date().toISOString(),
+          };
+          setMessages((prev) => [...prev, ackMessage]);
+        } else if (data.needs_clarification && data.goal_draft) {
+          // Store the goal draft for continuation
+          setPendingGoalDraft(data.goal_draft);
+
+          const clarificationMessage: Message = {
+            id: (Date.now() + 1).toString(),
+            role: "assistant",
+            content: data.message,
+            timestamp: new Date().toISOString(),
+          };
+          setMessages((prev) => [...prev, clarificationMessage]);
+        } else if (data.needs_confirmation && data.goal_draft) {
+          // Show goal preview for confirmation
+          setPendingGoalDraft(data.goal_draft);
+
+          const previewMessage: Message = {
+            id: (Date.now() + 1).toString(),
+            role: "assistant",
+            content: data.message,
+            timestamp: new Date().toISOString(),
+          };
+          setMessages((prev) => [...prev, previewMessage]);
+        } else {
+          // Regular response
+          const responseMessage: Message = {
+            id: (Date.now() + 1).toString(),
+            role: "assistant",
+            content: data.message,
+            timestamp: new Date().toISOString(),
+          };
+          setMessages((prev) => [...prev, responseMessage]);
+        }
+      } else {
+        // No goal intent, use regular chat
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error("Error processing goal message:", error);
+      return false;
+    }
+  };
+
+  const confirmGoal = async () => {
+    if (!pendingGoalDraft) return;
+
+    setIsProcessingGoal(true);
+
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const response = await fetch(`${apiUrl}/api/goals/from-chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: pendingGoalDraft.title,
+          description: pendingGoalDraft.description,
+          category: pendingGoalDraft.category,
+          checkin_frequency_days: pendingGoalDraft.suggested_checkin_frequency_days,
+          userId: "neo",
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to create goal");
+      }
+
+      const data = await response.json();
+
+      if (data.success) {
+        // Show acknowledgment message
+        const ackMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content: data.acknowledgment,
+          timestamp: new Date().toISOString(),
+        };
+        setMessages((prev) => [...prev, ackMessage]);
+
+        // Refresh goals list
+        await fetchGoals();
+
+        // Clear pending goal
+        setPendingGoalDraft(null);
+      }
+    } catch (error) {
+      console.error("Error creating goal:", error);
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: "I had trouble saving that goal. Please try again.",
+        timestamp: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
+      setIsProcessingGoal(false);
+    }
+  };
+
+  const editGoal = () => {
+    // Allow user to edit the goal in natural language
+    const editMessage: Message = {
+      id: (Date.now() + 1).toString(),
+      role: "assistant",
+      content: "Sure! Tell me what you'd like to change about this goal.",
+      timestamp: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, editMessage]);
+    setPendingGoalDraft(null);
   };
 
   const sendMessage = useCallback(async (messageText?: string) => {
@@ -186,31 +299,37 @@ export default function ChatPage() {
     setIsSending(true);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-      const response = await fetch(`${apiUrl}/api/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: textToSend,
-          userId: "neo",
-          goalId: selectedGoal,
-        }),
-      });
+      // First, try to process as a goal creation message
+      const processed = await processGoalMessage(textToSend);
 
-      if (!response.ok) {
-        throw new Error("Failed to send message");
+      if (!processed) {
+        // Use regular chat if no goal intent
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        const response = await fetch(`${apiUrl}/api/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: textToSend,
+            userId: "neo",
+            goalId: selectedGoal,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to send message");
+        }
+
+        const data = await response.json();
+
+        const assistantMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content: data.response || "I'm here to help! Tell me more about your goals.",
+          timestamp: new Date().toISOString(),
+        };
+
+        setMessages((prev) => [...prev, assistantMessage]);
       }
-
-      const data = await response.json();
-
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: data.response || "I'm here to help! Tell me more about your goals.",
-        timestamp: new Date().toISOString(),
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
     } catch (error) {
       console.error("Error sending message:", error);
       const errorMessage: Message = {
@@ -404,6 +523,68 @@ export default function ChatPage() {
                       <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                     </div>
                   )}
+
+                  {/* Goal Preview Card */}
+                  {pendingGoalDraft && (
+                    <div className="flex flex-col items-start gap-4 w-full max-w-3xl ml-14">
+                      <div className="bg-white dark:bg-gray-800 text-[#121217] dark:text-white text-base font-normal leading-relaxed rounded-2xl rounded-tl-none px-5 py-4 shadow-sm border border-gray-100 dark:border-gray-700 w-full">
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <span className="material-symbols-outlined text-primary">task_alt</span>
+                            <p className="text-sm font-bold uppercase tracking-widest text-[#686586] dark:text-gray-400">Goal Preview</p>
+                          </div>
+                        </div>
+                        <div className="space-y-3">
+                          <div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wider">Title</p>
+                            <p className="font-bold text-[#121217] dark:text-white">{pendingGoalDraft.title}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wider">Description</p>
+                            <p className="text-gray-600 dark:text-gray-300">{pendingGoalDraft.description}</p>
+                          </div>
+                          <div className="flex gap-4">
+                            <div>
+                              <p className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wider">Category</p>
+                              <p className="font-medium text-[#121217] dark:text-white capitalize">{pendingGoalDraft.category}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wider">Check-in Frequency</p>
+                              <p className="font-medium text-[#121217] dark:text-white">{pendingGoalDraft.suggested_checkin_frequency_days} days</p>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex gap-2 mt-4">
+                          <button
+                            onClick={confirmGoal}
+                            disabled={isProcessingGoal}
+                            className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl font-bold shadow-lg shadow-primary/20 hover:bg-[#4338ca] transition-all disabled:opacity-50"
+                          >
+                            {isProcessingGoal ? (
+                              <>
+                                <Loader2 className="animate-spin" size={16} />
+                                <span>Saving...</span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="material-symbols-outlined text-sm">check</span>
+                                <span>Confirm</span>
+                              </>
+                            )}
+                          </button>
+                          <button
+                            onClick={editGoal}
+                            disabled={isProcessingGoal}
+                            className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-[#121217] dark:text-white rounded-xl font-bold hover:bg-gray-200 dark:hover:bg-gray-600 transition-all disabled:opacity-50"
+                          >
+                            <span className="material-symbols-outlined text-sm">edit</span>
+                            <span>Edit</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div ref={messagesEndRef} />
                 </>
               )}
