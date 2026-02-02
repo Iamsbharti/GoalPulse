@@ -12,7 +12,11 @@ class TraceNames:
     GOAL_EXTRACTION = "goal-extraction"
     GOAL_REFINEMENT = "goal-refinement"
 
-    # Check-in Flow
+    # Check-in Flow (Phase 2)
+    CHECKIN_CREATE = "checkin-event"
+    CHECKIN_LIST = "checkin-history-view"
+    CHECKIN_SUMMARY = "checkin-summary"
+    # Legacy names (kept for compatibility)
     CHECKIN_ANALYSIS = "checkin-analysis"
     CHECKIN_RESPONSE = "checkin-response"
 

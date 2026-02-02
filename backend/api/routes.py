@@ -284,10 +284,19 @@ async def delete_goal(goal_id: str, db: AsyncSession = Depends(get_db)):
     return {"message": f"Goal {goal_id} deleted"}
 
 @router.get("/api/goals/{goal_id}/checkins", tags=["Check-ins"])
-async def list_checkins(goal_id: str, db: AsyncSession = Depends(get_db)):
+async def list_checkins(goal_id: str, userId: str = "neo", db: AsyncSession = Depends(get_db)):
     """List all check-ins for a specific goal."""
     goals_service = GoalsService(db)
     checkins = await goals_service.get_goal_checkins(goal_id)
+    
+    # Log check-in history view
+    _opik.log_span(TraceNames.CHECKIN_LIST,
+        output={
+            "goal_id": goal_id,
+            "count_returned": len(checkins)
+        },
+        input={"user_id": userId, "goal_id": goal_id})
+    
     return {"checkins": checkins}
 
 @router.post("/api/goals/{goal_id}/checkins", tags=["Check-ins"])
@@ -299,14 +308,35 @@ async def create_checkin(goal_id: str, request: CreateCheckinRequest, userId: st
     - **mood**: GREAT, OKAY, or LOW
     - **response**: Free text describing what was done
     """
-    goals_service = GoalsService(db)
-    checkin = await goals_service.create_checkin(
-        goal_id=goal_id,
-        user_id=userId,
-        progress=request.progress,
-        mood=request.mood,
-        response=request.response
-    )
+    # Thread ID groups all check-ins for the same goal
+    thread_id = f"checkin-{userId}-{goal_id}"
+    
+    with _opik.trace_context(
+        TraceNames.CHECKIN_CREATE,
+        input_data={
+            "user_id": userId,
+            "goal_id": goal_id,
+            "progress": request.progress,
+            "mood": request.mood,
+            "response_length": len(request.response) if request.response else 0
+        },
+        thread_id=thread_id
+    ) as trace:
+        goals_service = GoalsService(db)
+        checkin = await goals_service.create_checkin(
+            goal_id=goal_id,
+            user_id=userId,
+            progress=request.progress,
+            mood=request.mood,
+            response=request.response
+        )
+        
+        trace.set_output({
+            "checkin_id": str(checkin.id),
+            "created_at": checkin.created_at.isoformat() if checkin.created_at else None,
+            "success": True
+        })
+    
     return {
         "id": checkin.id,
         "goal_id": checkin.goal_id,
@@ -322,6 +352,17 @@ async def get_recent_checkins(userId: str = "neo", db: AsyncSession = Depends(ge
     """Get the most recent check-ins for a user (for dashboard feed)."""
     goals_service = GoalsService(db)
     checkins = await goals_service.get_user_recent_checkins(userId)
+    
+    # Calculate summary metrics for Opik
+    goals_touched = len(set(c.goal_id for c in checkins))
+    
+    # Log check-in summary view
+    _opik.log_span(TraceNames.CHECKIN_SUMMARY,
+        output={
+            "total_checkins": len(checkins),
+            "goals_touched": goals_touched
+        },
+        input={"user_id": userId})
     
     return {
         "checkins": [

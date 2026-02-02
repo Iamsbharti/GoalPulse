@@ -43,6 +43,9 @@ export default function Home() {
   const [selectedGoalForCheckin, setSelectedGoalForCheckin] = useState<Goal | null>(null);
 
   useEffect(() => {
+    // Guard to prevent double fetch in React 18 Strict Mode
+    let isMounted = true;
+
     const fetchGoals = async () => {
       try {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -52,6 +55,8 @@ export default function Home() {
           fetch(`${apiUrl}/api/checkins/recent?userId=neo`),
           fetch(`${apiUrl}/api/goals/least-active?userId=neo`)
         ]);
+
+        if (!isMounted) return;
 
         const data = await goalsRes.json();
         const mappedGoals = data.goals.map((g: any) => {
@@ -78,6 +83,9 @@ export default function Home() {
         // Fetch Motivation Insights (Slower, AI-driven)
         setIsMotivationLoading(true);
         const insightsResponse = await fetch(`${apiUrl}/api/insights/motivation?userId=neo`);
+
+        if (!isMounted) return;
+
         if (insightsResponse.ok) {
           const insightsData = await insightsResponse.json();
           setMotivationLevel(insightsData.level);
@@ -87,12 +95,18 @@ export default function Home() {
       } catch (error) {
         console.error("Error fetching data:", error);
       } finally {
-        setIsInitialLoading(false);
-        setIsMotivationLoading(false);
+        if (isMounted) {
+          setIsInitialLoading(false);
+          setIsMotivationLoading(false);
+        }
       }
     };
 
     fetchGoals();
+
+    return () => {
+      isMounted = false;
+    };
   }, [refreshKey]);
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
