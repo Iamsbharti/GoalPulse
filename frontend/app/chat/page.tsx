@@ -160,8 +160,8 @@ export default function ChatPage() {
           setPendingGoalDraft(null);
         }
 
-        if (data.goal_created && data.goal) {
-          // Goal was successfully created
+        if (data.goal_created) {
+          // Goal was successfully created - hide preview card and refresh
           setPendingGoalDraft(null);
           await fetchGoals();
 
@@ -214,73 +214,6 @@ export default function ChatPage() {
       console.error("Error processing goal message:", error);
       return false;
     }
-  };
-
-  const confirmGoal = async () => {
-    if (!pendingGoalDraft) return;
-
-    setIsProcessingGoal(true);
-
-    try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-      const response = await fetch(`${apiUrl}/api/goals/from-chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: pendingGoalDraft.title,
-          description: pendingGoalDraft.description,
-          category: pendingGoalDraft.category,
-          checkin_frequency_days: pendingGoalDraft.suggested_checkin_frequency_days,
-          userId: "neo",
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to create goal");
-      }
-
-      const data = await response.json();
-
-      if (data.success) {
-        // Show acknowledgment message
-        const ackMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          role: "assistant",
-          content: data.acknowledgment,
-          timestamp: new Date().toISOString(),
-        };
-        setMessages((prev) => [...prev, ackMessage]);
-
-        // Refresh goals list
-        await fetchGoals();
-
-        // Clear pending goal
-        setPendingGoalDraft(null);
-      }
-    } catch (error) {
-      console.error("Error creating goal:", error);
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: "I had trouble saving that goal. Please try again.",
-        timestamp: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, errorMessage]);
-    } finally {
-      setIsProcessingGoal(false);
-    }
-  };
-
-  const editGoal = () => {
-    // Allow user to edit the goal in natural language
-    const editMessage: Message = {
-      id: (Date.now() + 1).toString(),
-      role: "assistant",
-      content: "Sure! Tell me what you'd like to change about this goal.",
-      timestamp: new Date().toISOString(),
-    };
-    setMessages((prev) => [...prev, editMessage]);
-    setPendingGoalDraft(null);
   };
 
   const sendMessage = useCallback(async (messageText?: string) => {
@@ -343,6 +276,28 @@ export default function ChatPage() {
       setIsSending(false);
     }
   }, [isSending, selectedGoal]);
+
+  // Confirm goal: send "yes" through chat flow to keep LangGraph traces connected
+  const confirmGoal = useCallback(async () => {
+    if (!pendingGoalDraft) return;
+
+    // Clear pending goal first to avoid showing the preview card
+    setPendingGoalDraft(null);
+
+    // Send "yes" through the normal chat flow
+    await sendMessage("yes");
+  }, [pendingGoalDraft, sendMessage]);
+
+  // Edit goal: send "edit" through chat flow
+  const editGoal = useCallback(async () => {
+    if (!pendingGoalDraft) return;
+
+    // Clear pending goal
+    setPendingGoalDraft(null);
+
+    // Send "edit" through the normal chat flow
+    await sendMessage("edit");
+  }, [pendingGoalDraft, sendMessage]);
 
   const selectedGoalData = useMemo(() =>
     goals.find(g => g.id === selectedGoal) || null

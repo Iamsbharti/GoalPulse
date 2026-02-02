@@ -6,8 +6,12 @@ from services.llm_service import LLMService
 from services.goals_service import GoalsService
 from agents.goal_creation_agent import goal_creation_agent
 from models.database import get_db
+from observability import get_opik_client, TraceNames
 
 router = APIRouter()
+
+# Opik client for tracing
+_opik = get_opik_client()
 
 class ChatRequest(BaseModel):
     message: str
@@ -159,6 +163,15 @@ Keep it motivating but grounded. Max 2 sentences, no emojis.
 Goal title: "{request.title}"
 """
         ack_message = await llm.generate(ack_prompt)
+        
+        # Log Opik span for button-based goal creation
+        _opik.log_span("create_goal", {
+            "goal_id": str(goal.id),
+            "title": goal.title,
+            "category": goal.category,
+            "source": "button_confirm",
+            "success": True
+        })
 
         return {
             "success": True,
@@ -173,6 +186,15 @@ Goal title: "{request.title}"
         }
     except Exception as e:
         print(f"Error creating goal from chat: {e}")
+        
+        # Log Opik span for failure
+        _opik.log_span("create_goal", {
+            "title": request.title,
+            "source": "button_confirm",
+            "error": str(e),
+            "success": False
+        })
+        
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/api/goals/generate-description", tags=["Goals"])

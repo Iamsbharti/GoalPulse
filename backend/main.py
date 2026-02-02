@@ -12,6 +12,7 @@ load_dotenv()
 # Import the router and database init
 from api.routes import router as api_router
 from models.database import init_db
+from observability import get_opik_client
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -21,6 +22,15 @@ async def lifespan(app: FastAPI):
         print("Database initialized successfully")
     except Exception as e:
         print(f"Database initialization failed: {e}")
+    
+    # Initialize Opik observability
+    opik_client = get_opik_client()
+    opik_status = opik_client.check_health()
+    if opik_status["enabled"]:
+        print(f"Opik observability enabled (workspace: {opik_status['workspace']})")
+    else:
+        print("Opik observability disabled (OPIK_API_KEY not set)")
+    
     yield
 
 # API Tags for Swagger grouping
@@ -110,6 +120,19 @@ def health_check():
         - **timestamp**: Server timestamp in ISO format
     """
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+
+@app.get("/health/opik", tags=["Health"])
+def opik_health_check():
+    """
+    Opik observability health check.
+    
+    Returns:
+        - **enabled**: Whether Opik tracing is active
+        - **workspace**: Configured Opik workspace
+        - **api_key_set**: Whether OPIK_API_KEY is configured
+    """
+    opik_client = get_opik_client()
+    return opik_client.check_health()
 
 # Include the API routes
 app.include_router(api_router)

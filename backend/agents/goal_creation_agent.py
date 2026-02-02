@@ -8,13 +8,21 @@ Architecture Notes:
 - The graph handles ALL transitions, including continuation
 - No manual node calls outside the graph
 - State is minimal and focused
+- Opik observability added for LLM tracing
 """
 
 from typing import TypedDict, Optional, List, Literal
 from langgraph.graph import StateGraph, END
+from contextlib import asynccontextmanager
 import json
 import os
 import re
+
+# Opik observability
+from observability import get_opik_client, TraceNames
+
+# Initialize Opik wrapper
+_opik = get_opik_client()
 
 
 # ============================================================================
@@ -127,6 +135,9 @@ async def detect_intent(state: GoalCreationState) -> GoalCreationState:
     
     # Skip very short greetings/noise
     if len(user_input) < 2:
+        _opik.log_span("detect_intent", 
+            output={"user_input": user_input, "intent_detected": False, "reason": "input_too_short"},
+            input={"user_input": user_input})
         return {
             **state,
             "status": "idle",
@@ -161,6 +172,10 @@ RESPOND WITH ONLY: YES or NO"""
     print(f"DEBUG - detect_intent: LLM said '{response_clean}'")
     
     has_intent = "YES" in response_clean
+    
+    _opik.log_span("detect_intent", 
+        output={"user_input": user_input, "intent_detected": has_intent},
+        input={"user_input": user_input, "llm_response": response_clean})
     
     if has_intent:
         return {
@@ -214,6 +229,14 @@ If you can't determine a field, use:
     if goal_draft["category"] not in valid_categories:
         goal_draft["category"] = "personal"
     
+    _opik.log_span("extract_goal", 
+        output={
+            "extracted_title": goal_draft["title"],
+            "extracted_category": goal_draft["category"],
+            "extracted_frequency": goal_draft["frequency_days"]
+        },
+        input={"user_input": state['current_input']})
+    
     return {
         **state,
         "goal_draft": goal_draft
@@ -250,6 +273,14 @@ async def check_completeness(state: GoalCreationState) -> GoalCreationState:
     
     status = "collecting" if missing else "confirming"
     
+    _opik.log_span("check_completeness", 
+        output={
+            "missing_fields": missing,
+            "confidence_gate_triggered": "title" in missing and len(title.split()) <= 1,
+            "status": status
+        },
+        input={"title": title, "frequency_days": draft.get("frequency_days", 0)})
+    
     return {
         **state,
         "goal_draft": draft,
@@ -274,6 +305,14 @@ async def ask_clarification(state: GoalCreationState) -> GoalCreationState:
         question = f"Great goal: '{title}'! How often would you like to check in - daily, every few days, or weekly?"
     else:
         question = "Could you tell me a bit more about this goal?"
+    
+    clarification_reason = "title" if "title" in missing else ("frequency" if "frequency" in missing else "general")
+    _opik.log_span("ask_clarification", 
+        output={
+            "clarification_reason": clarification_reason,
+            "question_text": question
+        },
+        input={"missing_fields": missing, "current_draft_title": draft.get("title", "")})
     
     return {
         **state,
@@ -307,9 +346,20 @@ User said: "{user_input}"
 Return ONLY the goal title (3-8 words), nothing else."""
         title = await llm_generate(prompt)
         draft["title"] = title.strip().strip('"').strip("'")[:100]
+        updated_field = "title"
         
     elif "frequency" in missing:
         draft["frequency_days"] = parse_frequency(user_input)
+        updated_field = "frequency"
+    else:
+        updated_field = None
+    
+    _opik.log_span("parse_answer", 
+        output={
+            "user_reply": user_input,
+            "updated_fields": updated_field
+        },
+        input={"user_input": user_input, "missing_fields": missing})
     
     return {
         **state,
@@ -342,6 +392,13 @@ async def confirm_goal(state: GoalCreationState) -> GoalCreationState:
 
 Does this look right? Say **yes** to create, **edit** to change, or **cancel** to stop."""
     
+    _opik.log_span("confirm_goal", 
+        output={
+            "preview_title": draft.get('title', 'Untitled Goal'),
+            "preview_frequency": freq_text
+        },
+        input={"draft": draft})
+    
     return {
         **state,
         "status": "confirming",
@@ -359,29 +416,28 @@ async def handle_confirmation(state: GoalCreationState) -> GoalCreationState:
     cancel_words = ["no", "cancel", "stop", "never mind", "forget"]
     edit_words = ["edit", "change", "modify", "update", "fix"]
     
+    # Determine decision
     if any(word in user_input for word in confirm_words):
-        return {
-            **state,
-            "status": "complete"
-        }
+        decision = "confirm"
+        result = {**state, "status": "complete"}
     elif any(word in user_input for word in cancel_words):
-        return {
-            **state,
-            "status": "cancelled",
-            "response": "No problem! Goal creation cancelled. What else can I help you with?"
-        }
+        decision = "cancel"
+        result = {**state, "status": "cancelled", "response": "No problem! Goal creation cancelled. What else can I help you with?"}
     elif any(word in user_input for word in edit_words):
-        return {
-            **state,
-            "status": "collecting",
-            "missing_fields": ["title"],
-            "response": "Sure! What would you like to change about this goal?"
-        }
+        decision = "edit"
+        result = {**state, "status": "collecting", "missing_fields": ["title"], "response": "Sure! What would you like to change about this goal?"}
     else:
-        return {
-            **state,
-            "response": "I didn't quite catch that. Would you like me to create this goal? (yes/no/edit)"
-        }
+        decision = "unclear"
+        result = {**state, "response": "I didn't quite catch that. Would you like me to create this goal? (yes/no/edit)"}
+    
+    _opik.log_span("handle_confirmation", 
+        output={
+            "user_input": user_input,
+            "decision": decision
+        },
+        input={"user_input": user_input})
+    
+    return result
 
 
 async def create_goal(state: GoalCreationState) -> GoalCreationState:
@@ -410,6 +466,15 @@ async def create_goal(state: GoalCreationState) -> GoalCreationState:
         # Clean success message (no emojis)
         response = f"Goal created: **{goal.title}**\n\nI'll check in with you {freq_text}. You've got this!"
         
+        _opik.log_span("create_goal", 
+            output={
+                "goal_id": str(goal.id),
+                "title": goal.title,
+                "category": goal.category,
+                "success": True
+            },
+            input={"draft_title": draft.get("title", "Unknown"), "user_id": user_id})
+        
         return {
             **state,
             "status": "complete",
@@ -417,6 +482,15 @@ async def create_goal(state: GoalCreationState) -> GoalCreationState:
         }
     except Exception as e:
         print(f"Error creating goal: {e}")
+        
+        _opik.log_span("create_goal", 
+            output={
+                "title": draft.get("title", "Unknown"),
+                "error": str(e),
+                "success": False
+            },
+            input={"draft_title": draft.get("title", "Unknown"), "user_id": user_id})
+        
         return {
             **state,
             "status": "cancelled",
@@ -577,17 +651,51 @@ class GoalCreationAgent:
         Process a user message through the goal creation flow.
         
         Fix #1: All flows go through graph.ainvoke()
+        Observability: Wrapped with Opik trace_context for explicit nesting.
+        Thread ID links all traces from the same goal creation conversation.
         """
-        existing_session = self._get_session(user_id)
+        import uuid
         
-        if existing_session and existing_session.get("status") in ["collecting", "confirming"]:
-            # Continue existing conversation
-            return await self._continue_conversation(user_id, message, existing_session)
+        existing_session = self._get_session(user_id)
+        is_new_session = not (existing_session and existing_session.get("status") in ["collecting", "confirming"])
+        entry_point = "detect_intent" if is_new_session else (
+            "handle_confirmation" if existing_session.get("status") == "confirming" else "parse_answer"
+        )
+        
+        # Generate or reuse thread_id to link traces from same conversation
+        if is_new_session:
+            thread_id = f"goal-{user_id}-{uuid.uuid4().hex[:8]}"
         else:
-            # Start new conversation
-            return await self._start_conversation(user_id, message)
+            # Reuse thread_id from existing session
+            thread_id = existing_session.get("thread_id", f"goal-{user_id}-unknown")
+        
+        # Wrap execution with Opik trace for proper span nesting
+        with _opik.trace_context(
+            TraceNames.GOAL_CREATION,
+            input_data={
+                "user_id": user_id,
+                "message": message[:100],  # Truncate for readability
+                "entry_point": entry_point,
+                "is_new_session": is_new_session
+            },
+            thread_id=thread_id  # Links related traces together
+        ) as trace:
+            # Execute the flow inside trace context
+            if is_new_session:
+                result = await self._start_conversation(user_id, message, thread_id)
+            else:
+                result = await self._continue_conversation(user_id, message, existing_session)
+            
+            # Set trace output (missing_fields is at top level of state, not in goal_draft)
+            trace.set_output({
+                "status": result.get("status"),
+                "goal_created": result.get("goal_created", False),
+                "has_goal_intent": result.get("has_goal_intent", False)
+            })
+        
+        return result
     
-    async def _start_conversation(self, user_id: str, message: str) -> dict:
+    async def _start_conversation(self, user_id: str, message: str, thread_id: str) -> dict:
         """Start a new goal creation conversation."""
         initial_state: GoalCreationState = {
             "user_id": user_id,
@@ -602,7 +710,7 @@ class GoalCreationAgent:
         # Run the graph
         final_state = await self.graph.ainvoke(initial_state)
         
-        return self._handle_result(user_id, final_state)
+        return self._handle_result(user_id, final_state, thread_id)
     
     async def _continue_conversation(self, user_id: str, message: str, session: GoalCreationState) -> dict:
         """
@@ -626,9 +734,11 @@ class GoalCreationAgent:
         # Let the graph handle the entire flow
         final_state = await self.graph.ainvoke(updated_state)
         
-        return self._handle_result(user_id, final_state)
+        # Pass thread_id from session to _handle_result
+        thread_id = session.get("thread_id")
+        return self._handle_result(user_id, final_state, thread_id)
     
-    def _handle_result(self, user_id: str, final_state: GoalCreationState) -> dict:
+    def _handle_result(self, user_id: str, final_state: GoalCreationState, thread_id: str = None) -> dict:
         """Process the final state and update session."""
         status = final_state.get("status", "idle")
         
@@ -636,8 +746,11 @@ class GoalCreationAgent:
         if status in ["complete", "cancelled", "idle"]:
             self._clear_session(user_id)
         else:
-            # Save session for mid-flow states
-            self._save_session(user_id, final_state)
+            # Save session for mid-flow states, including thread_id for trace linking
+            session_to_save = {**final_state}
+            if thread_id:
+                session_to_save["thread_id"] = thread_id
+            self._save_session(user_id, session_to_save)
         
         return {
             "has_goal_intent": status != "idle",
