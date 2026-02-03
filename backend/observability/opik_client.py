@@ -187,7 +187,7 @@ class OpikWrapper:
 
 
 class _TraceHandle:
-    """Handle for setting trace output."""
+    """Handle for setting trace output and logging nested spans."""
     
     def __init__(self, trace):
         self._trace = trace
@@ -198,12 +198,23 @@ class _TraceHandle:
             self._trace.update(output=output)
         except Exception as e:
             logger.error(f"Error setting trace output: {e}")
+    
+    def log_span(self, name: str, input: dict = None, output: dict = None) -> None:
+        """Log a span nested under this trace."""
+        try:
+            span = self._trace.span(name=name, input=input or {})
+            span.end(output=output or {})
+        except Exception as e:
+            logger.error(f"Error logging nested span '{name}': {e}")
 
 
 class _NoOpTrace:
     """No-op trace handle when Opik is disabled."""
     
     def set_output(self, output: dict) -> None:
+        pass
+    
+    def log_span(self, name: str, input: dict = None, output: dict = None) -> None:
         pass
 
 

@@ -7,6 +7,9 @@ from services.goals_service import GoalsService
 from agents.goal_creation_agent import goal_creation_agent
 from models.database import get_db
 from observability import get_opik_client, TraceNames
+from sqlalchemy import select, func
+from models.database import Checkin
+from datetime import datetime, timedelta
 
 router = APIRouter()
 
@@ -385,19 +388,41 @@ async def get_recent_checkins(userId: str = "neo", db: AsyncSession = Depends(ge
 @router.get("/api/insights/motivation", tags=["Insights"])
 async def get_motivation_insight(userId: str = "neo", db: AsyncSession = Depends(get_db)):
     """
-    Get motivation level and AI-generated encouragement.
+    Get motivation level, AI-generated encouragement, and at-risk snapshot.
     
-    Returns a 0-100 motivation score based on:
-    - Consistency (60%): Check-in frequency
-    - Vibe (40%): Mood and progress sentiment
+    Returns:
+    - Motivation score (0-100) based on consistency (60%) and vibe (40%)
+    - AI-generated motivational message (with LLM-as-judge evaluation)
+    - At-risk snapshot with deterministic heuristics and AI explanation
     
-    Also includes an AI-generated motivational message.
+    All traces linked under thread_id: motivation-{userId}
     """
     goals_service = GoalsService(db)
+    
+    # Phase 3: Calculate motivation
     motivation_data = await goals_service.calculate_motivation_level(userId)
+    
+    # Phase 4: Generate AI message (includes LLM-as-judge evals)
     message = await goals_service.generate_motivation_hook(userId, motivation_data)
+    
+    # Get recent check-in count for at-risk calculation (reusable helper)
+    recent_checkin_count = await goals_service.get_recent_checkin_count(userId, days=7)
+    
+    # Phase 5: Compute at-risk snapshot (diagnostic, not trigger)
+    at_risk = await goals_service.compute_at_risk_snapshot(
+        user_id=userId,
+        motivation_data=motivation_data,
+        recent_checkin_count=recent_checkin_count,
+        ai_eval_encouragement=3
+    )
     
     return {
         "level": motivation_data["score"],
-        "message": message
+        "message": message,
+        "at_risk": {
+            "risk_level": at_risk["risk_level"],
+            "risk_score": at_risk["risk_score"],
+            "confidence": at_risk["confidence"],
+            "explanation": at_risk["ai_explanation"]
+        }
     }
