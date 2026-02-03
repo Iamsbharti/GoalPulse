@@ -69,6 +69,24 @@ class Checkin(Base):
     goal: Mapped["Goal"] = relationship("Goal", back_populates="checkins")
     user: Mapped["User"] = relationship("User", back_populates="checkins")
 
+class MotivationSnapshot(Base):
+    """
+    Stores historical motivation scores for trend visualization.
+    
+    Created whenever motivation is calculated (on insights load).
+    Enables "Motivation over last 7 days" sparkline on Insights page.
+    Reusable for per-goal motivation history in future phases.
+    """
+    __tablename__ = "motivation_snapshots"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    goal_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("goals.id", ondelete="CASCADE"), nullable=True)  # None = overall, set = per-goal
+    score: Mapped[int] = mapped_column(nullable=False)
+    consistency_score: Mapped[Optional[int]] = mapped_column(nullable=True)
+    vibe_score: Mapped[Optional[int]] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
 # Database Setup
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/GoalPulse")
 

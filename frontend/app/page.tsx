@@ -88,7 +88,7 @@ export default function Home() {
 
         if (insightsResponse.ok) {
           const insightsData = await insightsResponse.json();
-          setMotivationLevel(insightsData.level);
+          setMotivationLevel(insightsData.motivation_breakdown.score);
           setDailyPulseMessage(insightsData.message);
         }
 

@@ -10,6 +10,11 @@ from observability import get_opik_client, TraceNames
 from sqlalchemy import select, func
 from models.database import Checkin
 from datetime import datetime, timedelta
+from services.utils import (
+    determine_motivation_band,
+    get_micro_label,
+    build_risk_exposure_data
+)
 
 router = APIRouter()
 
@@ -384,31 +389,42 @@ async def get_recent_checkins(userId: str = "neo", db: AsyncSession = Depends(ge
     }
 
 
-
 @router.get("/api/insights/motivation", tags=["Insights"])
 async def get_motivation_insight(userId: str = "neo", db: AsyncSession = Depends(get_db)):
     """
-    Get motivation level, AI-generated encouragement, and at-risk snapshot.
+    Get comprehensive motivation insights for the Insights page.
     
     Returns:
-    - Motivation score (0-100) based on consistency (60%) and vibe (40%)
-    - AI-generated motivational message (with LLM-as-judge evaluation)
-    - At-risk snapshot with deterministic heuristics and AI explanation
+    - Human-friendly presentation layer (micro_label, motivation_label, message)
+    - Motivation breakdown (consistency vs vibe)
+    - Motivation history (last 7 days)
+    - AI message quality scores (from LLM-as-judge)
+    - At-risk snapshot (conditional display)
     
     All traces linked under thread_id: motivation-{userId}
     """
     goals_service = GoalsService(db)
     
-    # Phase 3: Calculate motivation
+    # --- Calculate motivation ---
     motivation_data = await goals_service.calculate_motivation_level(userId)
+    score = motivation_data["score"]
     
-    # Phase 4: Generate AI message (includes LLM-as-judge evals)
+    # Save snapshot for historical tracking
+    await goals_service.save_motivation_snapshot(
+        user_id=userId,
+        score=score,
+        consistency_score=motivation_data.get("consistency_score"),
+        vibe_score=motivation_data.get("vibe_score")
+    )
+    
+    # Get motivation history for trend
+    motivation_history = await goals_service.get_motivation_history(userId, days=7)
+    
+    # --- Generate AI message ---
     message = await goals_service.generate_motivation_hook(userId, motivation_data)
     
-    # Get recent check-in count for at-risk calculation (reusable helper)
+    # --- At-risk snapshot ---
     recent_checkin_count = await goals_service.get_recent_checkin_count(userId, days=7)
-    
-    # Phase 5: Compute at-risk snapshot (diagnostic, not trigger)
     at_risk = await goals_service.compute_at_risk_snapshot(
         user_id=userId,
         motivation_data=motivation_data,
@@ -416,13 +432,60 @@ async def get_motivation_insight(userId: str = "neo", db: AsyncSession = Depends
         ai_eval_encouragement=3
     )
     
+    # Deterministic motivation bands 
+    band_data = determine_motivation_band(score)
+    motivation_band = band_data["band"]
+    motivation_label = band_data["label"]
+    
+    # Micro-label (deterministic warmth layer)
+    micro_label = get_micro_label(motivation_band)
+    
+    # At-risk exposure (using utils)
+    risk_exposure = build_risk_exposure_data(at_risk)
+    show_alert = risk_exposure["show_alert"]
+    triggered_reasons = risk_exposure["triggered_reasons"]
+    
+    # API Response
     return {
-        "level": motivation_data["score"],
+        # UI
+        "micro_label": micro_label,
+        "motivation_label": motivation_label,
         "message": message,
+        "show_alert": show_alert,
+        "alert_explanation": at_risk["ai_explanation"] if show_alert else None,
+        
+        # Motivation breakdown (for insight cards)
+        "motivation_breakdown": {
+            "score": score,
+            "consistency": motivation_data.get("consistency_score", 0),
+            "vibe": motivation_data.get("vibe_score", 0)
+        },
+        
+        # Motivation history (for sparkline)
+        "motivation_history": motivation_history,
+        
+        # Message quality (AI eval panel)
+        "message_quality": {
+            "encouragement": motivation_data.get("eval_encouragement", 3),
+            "alignment": motivation_data.get("eval_alignment", 3),
+            "clarity": motivation_data.get("eval_clarity", 3),
+            "average": motivation_data.get("eval_average", 3.0)
+        },
+        
+        # At-risk data (conditional display)
         "at_risk": {
-            "risk_level": at_risk["risk_level"],
-            "risk_score": at_risk["risk_score"],
+            "level": at_risk["risk_level"],
             "confidence": at_risk["confidence"],
-            "explanation": at_risk["ai_explanation"]
+            "reasons": triggered_reasons
+        },
+        
+        # Debug layer (for Opik, developers)
+        "_debug": {
+            "level": score,
+            "motivation_band": motivation_band,
+            "raw_consistency": motivation_data.get("consistency_score"),
+            "raw_vibe": motivation_data.get("vibe_score"),
+            "at_risk_score": at_risk["risk_score"],
+            "triggered_signals": at_risk["triggered_signals"]
         }
     }
