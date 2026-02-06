@@ -221,7 +221,7 @@ class GoalsService:
         
         return [
             {
-                "date": s.created_at.strftime("%Y-%m-%d"),
+                "date": s.created_at.isoformat(),
                 "score": s.score,
                 "consistency": s.consistency_score,
                 "vibe": s.vibe_score

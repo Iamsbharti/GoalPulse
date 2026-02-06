@@ -105,18 +105,31 @@ export function MotivationTrendSparkline({ history }: { history: MotivationHisto
         );
     }
 
-    // Deduplicate by date (take the latest entry for each day)
-    const dailyHistory = history.reduce((acc, point) => {
-        // Asuming point.date is an ISO string or similar, extract YYYY-MM-DD
-        const dateKey = new Date(point.date).toLocaleDateString();
-        acc[dateKey] = point; // Overwrite with latest
-        return acc;
-    }, {} as Record<string, MotivationHistoryPoint>);
-
-    // Convert back to array and sort
-    const processedHistory = Object.values(dailyHistory).sort((a, b) =>
-        new Date(a.date).getTime() - new Date(b.date).getTime()
+    // Check if all history points are from the same day
+    // Check if all history points are from the same day
+    const allSameDay = history.length > 1 && history.every(h =>
+        new Date(h.date).toDateString() === new Date(history[0].date).toDateString()
     );
+
+    let processedHistory: MotivationHistoryPoint[] = [];
+
+    if (allSameDay) {
+        // Intraday mode: Show all points sorted by time
+        processedHistory = [...history].sort((a, b) =>
+            new Date(a.date).getTime() - new Date(b.date).getTime()
+        );
+    } else {
+        // Interday mode: Deduplicate by date (take latest per day)
+        const dailyHistory = history.reduce((acc, point) => {
+            const dateKey = new Date(point.date).toLocaleDateString();
+            acc[dateKey] = point;
+            return acc;
+        }, {} as Record<string, MotivationHistoryPoint>);
+
+        processedHistory = Object.values(dailyHistory).sort((a, b) =>
+            new Date(a.date).getTime() - new Date(b.date).getTime()
+        );
+    }
 
     const dataPoints = processedHistory.slice(-7);
 
@@ -285,7 +298,7 @@ export function MotivationTrendSparkline({ history }: { history: MotivationHisto
                 ))}
             </svg>
 
-            {/* Day labels */}
+            {/* Labels (Adaptive: Time vs Day) */}
             <div className="flex justify-between mt-2 px-2">
                 {dataPoints.map((point, i) => (
                     <p
@@ -293,7 +306,10 @@ export function MotivationTrendSparkline({ history }: { history: MotivationHisto
                         className={`text-xs font-bold ${i === dataPoints.length - 1 ? '' : 'text-gray-400'}`}
                         style={i === dataPoints.length - 1 ? { color: activeColor } : {}}
                     >
-                        {new Date(point.date).toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()}
+                        {allSameDay
+                            ? new Date(point.date).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                            : new Date(point.date).toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()
+                        }
                     </p>
                 ))}
             </div>
