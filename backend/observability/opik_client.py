@@ -100,46 +100,41 @@ class OpikWrapper:
     def trace_context(self, name: str, input_data: dict = None, thread_id: str = None):
         """
         Context manager for explicit trace wrapping with proper nesting.
-        
-        Usage:
-            with opik_client.trace_context("goal-creation-flow", {"user_id": "123"}, thread_id="session-abc") as trace:
-                # do work
-                trace.set_output({"status": "complete"})
-        
-        Args:
-            name: Name of the trace
-            input_data: Input data to log
-            thread_id: Optional thread ID to link related traces together (e.g., same conversation)
-        
-        This ensures spans created inside are properly nested under this trace.
         """
         self._initialize()
 
         if not self._enabled:
-            # Yield a no-op trace object
             yield _NoOpTrace()
             return
 
+        # Setup phase
+        trace = None
+        old_trace = None
         try:
             import opik
             
-            # Create trace with Opik client, including thread_id if provided
+            # Create trace with Opik client
             trace = self._client.trace(name=name, input=input_data, thread_id=thread_id)
             
             # Store in thread-local for child spans
             old_trace = getattr(_trace_context, 'current_trace', None)
             _trace_context.current_trace = trace
             
-            try:
-                yield _TraceHandle(trace)
-            finally:
-                # End trace and restore context
-                trace.end()
-                _trace_context.current_trace = old_trace
-                
         except Exception as e:
-            logger.error(f"Error in trace_context: {e}")
+            logger.error(f"Error initializing trace context '{name}': {e}")
             yield _NoOpTrace()
+            return
+
+        # Execution phase
+        try:
+            yield _TraceHandle(trace)
+        finally:
+            if trace:
+                trace.end()
+            if old_trace is not None:
+                _trace_context.current_trace = old_trace
+            elif hasattr(_trace_context, 'current_trace'):
+                del _trace_context.current_trace
 
     def log_span(self, name: str, output: dict, input: dict = None) -> None:
         """

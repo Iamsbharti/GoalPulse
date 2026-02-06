@@ -7,6 +7,7 @@ import { getMoodConfig } from "@/lib/mood-constants";
 import { AddResolutionModal } from "@/components/AddResolutionModal";
 import { GoalSelectorModal } from "@/components/GoalSelectorModal";
 import { CheckInModal } from "@/components/CheckInModal";
+import GoalInsightsModal from "@/components/GoalInsightsModal";
 
 interface Goal {
   id: string;
@@ -41,6 +42,8 @@ export default function Home() {
   const [isAddResolutionOpen, setIsAddResolutionOpen] = useState(false);
   const [isGoalSelectorOpen, setIsGoalSelectorOpen] = useState(false);
   const [selectedGoalForCheckin, setSelectedGoalForCheckin] = useState<Goal | null>(null);
+  const [isGoalInsightsOpen, setIsGoalInsightsOpen] = useState(false);
+  const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
 
   useEffect(() => {
     // Guard to prevent double fetch in React 18 Strict Mode
@@ -80,7 +83,7 @@ export default function Home() {
         // Goals are ready, show dashboard
         setIsInitialLoading(false);
 
-        // Fetch Motivation Insights (Slower, AI-driven)
+        // Fetch Motivation Insights
         setIsMotivationLoading(true);
         const insightsResponse = await fetch(`${apiUrl}/api/insights/motivation?userId=neo`);
 
@@ -183,9 +186,6 @@ export default function Home() {
           </div>
           <div className="flex items-center gap-4 border-l border-gray-100 dark:border-gray-800 pl-6">
             <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">
-              <span className="material-symbols-outlined">notifications</span>
-            </button>
-            <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">
               <span className="material-symbols-outlined">settings</span>
             </button>
           </div>
@@ -243,7 +243,18 @@ export default function Home() {
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {goals.map((goal) => (
-                      <div key={goal.id} className="flex flex-col gap-3 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-100 dark:border-gray-700">
+                      <div
+                        key={goal.id}
+                        onClick={() => {
+                          setSelectedGoalId(goal.id);
+                          setIsGoalInsightsOpen(true);
+                        }}
+                        className="flex flex-col gap-3 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-100 dark:border-gray-700 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors group relative"
+                      >
+                        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <span className="material-symbols-outlined text-gray-400 text-sm">bar_chart</span>
+                        </div>
+
                         <div className="relative size-20 mx-auto">
                           <svg className="size-full -rotate-90" viewBox="0 0 36 36">
                             <circle className="stroke-gray-200 dark:stroke-gray-700" cx="18" cy="18" fill="none" r="16" strokeWidth="3"></circle>
@@ -264,7 +275,7 @@ export default function Home() {
                           </div>
                         </div>
                         <div className="text-center">
-                          <p className="font-bold text-[#121217] dark:text-white">{goal.title}</p>
+                          <p className="font-bold text-[#121217] dark:text-white group-hover:text-primary transition-colors">{goal.title}</p>
                           <p className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wider mt-1">{goal.category}</p>
                         </div>
                       </div>
@@ -284,20 +295,6 @@ export default function Home() {
             </div>
 
             <div className="space-y-6">
-              <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-900/20 dark:to-emerald-800/20 rounded-2xl border border-emerald-accent/20 p-6">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="material-symbols-outlined text-emerald-accent text-xl">insights</span>
-                  <p className="text-emerald-accent text-sm font-bold uppercase tracking-widest">AI Insights</p>
-                </div>
-                <p className="text-[#121217] dark:text-white text-base leading-relaxed mb-4">
-                  Based on your morning patterns, you&apos;re <span className="font-bold text-emerald-accent">85% likely</span> to hit your &apos;Morning Run&apos; goal this week.
-                </p>
-                <Link href="/insights" className="text-sm font-bold text-primary flex items-center gap-1 hover:gap-2 transition-all">
-                  View Detail Report
-                  <span className="material-symbols-outlined text-lg">arrow_forward</span>
-                </Link>
-              </div>
-
               <div className="bg-white dark:bg-white/5 rounded-2xl shadow-sm border border-black/5 dark:border-white/10 p-6 min-h-[200px]">
                 <h4 className="font-bold text-[#121217] dark:text-white mb-4 flex items-center gap-2">
                   <span className="material-symbols-outlined text-orange-500">warning</span>
@@ -438,6 +435,14 @@ export default function Home() {
           />
         )
       }
+
+      {selectedGoalId && (
+        <GoalInsightsModal
+          isOpen={isGoalInsightsOpen}
+          onClose={() => setIsGoalInsightsOpen(false)}
+          goalId={selectedGoalId}
+        />
+      )}
     </div >
   );
 }

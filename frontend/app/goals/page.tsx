@@ -6,6 +6,7 @@ import { Loader2 } from "lucide-react";
 import { CheckInModal } from "@/components/CheckInModal";
 import { CheckinHistoryModal } from "@/components/CheckinHistoryModal";
 import { EditResolutionModal } from "@/components/EditResolutionModal";
+import GoalInsightsModal from "@/components/GoalInsightsModal";
 
 interface Goal {
   id: string;
@@ -54,6 +55,7 @@ export default function GoalsPage() {
   // Modal state
   const [checkInModalGoal, setCheckInModalGoal] = useState<{ id: string; title: string } | null>(null);
   const [historyModalGoal, setHistoryModalGoal] = useState<{ id: string; title: string } | null>(null);
+  const [insightsModalGoal, setInsightsModalGoal] = useState<{ id: string; title: string } | null>(null);
 
   // Edit/Delete state
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
@@ -646,6 +648,13 @@ export default function GoalsPage() {
                       <span className="material-symbols-outlined">history</span>
                       <span>History</span>
                     </button>
+                    <button
+                      onClick={() => setInsightsModalGoal({ id: goal.id, title: goal.title })}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-300 rounded-xl font-medium hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors"
+                    >
+                      <span className="material-symbols-outlined">analytics</span>
+                      <span>Insights</span>
+                    </button>
                   </div>
                 </div>
               ))}
@@ -679,6 +688,14 @@ export default function GoalsPage() {
           onClose={() => setHistoryModalGoal(null)}
           goalId={historyModalGoal.id}
           goalTitle={historyModalGoal.title}
+        />
+      )}
+
+      {insightsModalGoal && (
+        <GoalInsightsModal
+          isOpen={true}
+          onClose={() => setInsightsModalGoal(null)}
+          goalId={insightsModalGoal.id}
         />
       )}
 

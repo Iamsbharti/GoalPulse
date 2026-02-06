@@ -14,6 +14,54 @@ import re
 
 
 # ============================================================
+# METRIC CALCULATION UTILITIES
+# ============================================================
+
+def calculate_vibe_metrics(recent_checkins: list) -> dict:
+    """
+    Calculate vibe score based on mood and progress of checkins.
+    Reused by overall and per-goal motivation calculation.
+    
+    Args:
+        recent_checkins: List of Checkin objects (must have .mood and .progress)
+        
+    Returns:
+        Dict with vibe_score, vibe_summary, avg_mood, avg_progress
+    """
+    if not recent_checkins:
+        return {
+            "vibe_score": 50.0,
+            "vibe_summary": "No recent activity",
+            "avg_mood": 0.5,
+            "avg_progress": 0.5
+        }
+        
+    mood_map = {"GREAT": 1.0, "OKAY": 0.6, "LOW": 0.2}
+    progress_map = {"YES": 1.0, "PARTIAL": 0.6, "NO": 0.2}
+    
+    total_mood = sum(mood_map.get(c.mood, 0.6) for c in recent_checkins)
+    total_progress = sum(progress_map.get(c.progress, 0.6) for c in recent_checkins)
+    count = len(recent_checkins)
+    
+    avg_mood = total_mood / count
+    avg_progress = total_progress / count
+    
+    # Equal weight between mood & progress
+    vibe_val = (avg_mood * 0.5) + (avg_progress * 0.5)
+    vibe_score = vibe_val * 100
+    
+    # Simple summary for LLM
+    vibe_summary = f"Avg Mood: {avg_mood:.2f}, Avg Progress: {avg_progress:.2f}"
+    
+    return {
+        "vibe_score": vibe_score,
+        "vibe_summary": vibe_summary,
+        "avg_mood": avg_mood,
+        "avg_progress": avg_progress
+    }
+
+
+# ============================================================
 # MOTIVATION MESSAGE UTILITIES
 # ============================================================
 
@@ -247,6 +295,45 @@ def build_risk_explanation_prompt(
                 
                 Example: "Your recent check-ins have dropped and motivation is below 50%, which may indicate a need to reset expectations."
                 """
+
+
+def build_goal_motivation_message_prompt(
+    goal_title: str,
+    motivation_state: str,
+    consistency_state: str,
+    vibe_state: str,
+    tone: str
+) -> str:
+    """
+    Language-first prompt for Single Goal motivational messages.
+    Includes goal context.
+    """
+    tone_instruction = {
+        "momentum": "Be energetic and hyped!",
+        "steady": "Be supportive and steady.",
+        "gentle": "Be gentle and empathetic."
+    }.get(tone, "Be supportive.")
+    
+    return f"""You are a warm, encouraging motivational coach.
+
+                Goal: "{goal_title}"
+                User state for this goal:
+                - Momentum: {motivation_state}
+                - Habits: {consistency_state}
+                - Energy: {vibe_state}
+
+                Write ONE short, encouraging sentence for this specific goal.
+
+                Rules:
+                - Mention the goal context implicitly or explicitly
+                - No numbers or percentages
+                - No statistics or metrics
+                - Focus on encouragement and continuity
+                - Natural, conversational tone
+                - Maximum 20 words
+                - End with a period, exclamation, or dash
+
+            Tone: {tone.upper()} - {tone_instruction}"""
 
 
 # ============================================================

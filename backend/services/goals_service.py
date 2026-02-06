@@ -1,6 +1,5 @@
 from typing import Optional, List
-from sqlalchemy import select
-from typing import Optional, List
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,10 +11,13 @@ from services.llm_service import LLMService
 from services.utils import (
             compute_risk_signals,
             build_risk_explanation_prompt,
-            build_risk_clarity_eval_prompt,
+    build_risk_clarity_eval_prompt,
             build_risk_actionability_eval_prompt,
             format_signals_text,
-            parse_eval_score
+            parse_eval_score,
+            calculate_vibe_metrics,
+            build_goal_motivation_message_prompt,
+            convert_to_qualitative_signals
         )
 
 # Opik client for motivation engine tracing
@@ -131,6 +133,20 @@ class GoalsService:
         )
         return result.scalar() or 0
 
+    async def get_goal_recent_checkin_count(self, user_id: str, goal_id: str, days: int = 7) -> int:
+        """Get recent checkin count for a specific goal."""
+        from sqlalchemy import func
+        from datetime import datetime, timedelta
+        
+        cutoff_date = (datetime.now(timezone.utc) - timedelta(days=days)).replace(tzinfo=None)
+        result = await self.session.execute(
+            select(func.count(Checkin.id))
+            .where(Checkin.user_id == user_id)
+            .where(Checkin.goal_id == goal_id)
+            .where(Checkin.created_at >= cutoff_date)
+        )
+        return result.scalar() or 0
+
     async def save_motivation_snapshot(
         self, 
         user_id: str, 
@@ -184,7 +200,7 @@ class GoalsService:
         from models.database import MotivationSnapshot
         from datetime import datetime, timedelta
         
-        cutoff_date = datetime.utcnow() - timedelta(days=days)
+        cutoff_date = (datetime.now(timezone.utc) - timedelta(days=days)).replace(tzinfo=None)
         
         query = (
             select(MotivationSnapshot)
@@ -321,29 +337,16 @@ class GoalsService:
             
             # 4. Calculate Vibe Score (40%)
             # Logic: Explicit Normalize Mood + Progress
-            if not recent_checkins:
-                vibe_score = 50
-                vibe_summary = "No recent activity"
-                avg_mood = 0.5
-                avg_progress = 0.5
-                vibe_val = 0.5
-            else:
-                mood_map = {"GREAT": 1.0, "OKAY": 0.6, "LOW": 0.2}
-                progress_map = {"YES": 1.0, "PARTIAL": 0.6, "NO": 0.2}
-                
-                total_mood = sum(mood_map.get(c.mood, 0.6) for c in recent_checkins)
-                total_progress = sum(progress_map.get(c.progress, 0.6) for c in recent_checkins)
-                count = len(recent_checkins)
-                
-                avg_mood = total_mood / count
-                avg_progress = total_progress / count
-                
-                # Equal weight between mood & progress
-                vibe_val = (avg_mood * 0.5) + (avg_progress * 0.5)
-                vibe_score = vibe_val * 100
-                
-                # Simple summary for LLM
-                vibe_summary = f"Avg Mood: {avg_mood:.2f}, Avg Progress: {avg_progress:.2f}"
+            # 4. Calculate Vibe Score (40%)
+            # Logic: Explicit Normalize Mood + Progress
+            vibe_data = calculate_vibe_metrics(recent_checkins)
+            vibe_score = vibe_data["vibe_score"]
+            vibe_summary = vibe_data["vibe_summary"]
+            avg_mood = vibe_data["avg_mood"]
+            avg_progress = vibe_data["avg_progress"]
+            
+            # Derived value for legacy trace compatibility
+            vibe_val = vibe_score / 100.0
             
             # Span: Vibe calculation
             _opik.log_span("motivation-vibe",
@@ -382,6 +385,104 @@ class GoalsService:
                 "consistency_summary": f"{len(active_checked_ids)} of {total_active_goals} active goals checked in (floor applied: {consistency_raw < 0.3})",
                 "vibe_summary": vibe_summary,
                 "time_window": "last 3 days"
+            }
+        
+    async def calculate_goal_motivation_level(self, user_id: str, goal_id: str) -> dict:
+        """
+        Calculate motivation level for a SINGLE goal.
+        
+        Reuses utility logic for consistency (depth) and vibe.
+        """
+        thread_id = f"{user_id}-goal-{goal_id}"
+        
+        with _opik.trace_context(
+            "goal-motivation-calculation",
+            input_data={"user_id": user_id, "goal_id": goal_id},
+            thread_id=thread_id
+        ) as trace:
+            # 1. Get Goal & Recency
+            goal = await self.get_goal(goal_id)
+            if not goal:
+                raise ValueError("Goal not found")
+                
+            # 2. Get Recent Checkins for THIS goal (Last 20)
+            checkins_result = await self.session.execute(
+                select(Checkin)
+                .where(Checkin.goal_id == goal_id)
+                .order_by(Checkin.created_at.desc())
+                .limit(20)
+            )
+            recent_checkins = checkins_result.scalars().all()
+            
+            # 3. Calculate Consistency (Depth)
+            # Logic: Simple recent activity vs expected checkins (approx)
+            # If checked in recently (last 7 days), good consistency.
+            # Determine expected consistency based on checkins
+            
+            if not recent_checkins:
+                consistency_score = 30
+                consistency_summary = "No recent check-ins"
+                consistency_floor_triggered = True
+            else:
+                # Check metrics for last 7 days
+                week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).replace(tzinfo=None)
+                recent_week_checkins = [c for c in recent_checkins if c.created_at >= week_ago]
+                checkin_count = len(recent_week_checkins)
+                
+                # Simple rule for single goal: 
+                # >= 3 checkins/week = 100
+                # 1-2 checkins/week = 70
+                # 0 checkins/week = 30
+                if checkin_count >= 3:
+                    consistency_score = 100
+                    consistency_summary = "Very consistent (3+ times/week)"
+                elif checkin_count >= 1:
+                    consistency_score = 70
+                    consistency_summary = "Fairly regular (1-2 times/week)"
+                else:
+                    consistency_score = 30
+                    consistency_summary = "No check-ins this week"
+                    
+                consistency_floor_triggered = False
+
+            _opik.log_span("goal-consistency", output={"consistency_score": consistency_score})
+            
+            # 4. Calculate Vibe (Reuse Util)
+            vibe_data = calculate_vibe_metrics(recent_checkins)
+            vibe_score = vibe_data["vibe_score"]
+            vibe_summary = vibe_data["vibe_summary"]
+            
+            _opik.log_span("goal-vibe", output={"vibe_score": vibe_score, "summary": vibe_summary})
+            
+            # Weighted Score
+            final_score = (consistency_score * 0.6) + (vibe_score * 0.4)
+            final_score = max(0, min(100, final_score))
+            
+            # Determine Motivation Band
+            motivation_band = "steady"
+            if final_score >= 70:
+                motivation_band = "high"
+            elif final_score < 40:
+                motivation_band = "low"
+            
+            trace.set_output({
+                "final_score": int(final_score),
+                "consistency_score": consistency_score,
+                "vibe_score": vibe_score,
+                "band": motivation_band
+            })
+            
+            return {
+                "score": int(final_score),
+                "consistency_score": int(consistency_score),
+                "vibe_score": int(vibe_score),
+                "consistency_summary": consistency_summary,
+                "vibe_summary": vibe_summary,
+                "consistency_floor_triggered": consistency_floor_triggered,
+                # Additional fields for API response
+                "motivation_band": motivation_band,
+                "at_risk_score": 0.0, # Placeholder, will be computed in endpoint
+                "triggered_signals": {} # Placeholder
             }
         
     async def generate_motivation_hook(self, user_id: str, motivation_data: dict) -> str:
@@ -511,12 +612,56 @@ class GoalsService:
             
             return message
 
+    async def generate_goal_motivation_hook(self, user_id: str, goal_id: str, goal_title: str, motivation_data: dict) -> str:
+        """
+        Generate AI motivational message for a SINGLE goal.
+        Feature-flagged.
+        """
+        ENABLE_GOAL_AI_INSIGHTS = os.getenv("ENABLE_GOAL_AI_INSIGHTS", "true").lower() == "true"
+        
+        if not ENABLE_GOAL_AI_INSIGHTS:
+            return None
+            
+        gen_llm = LLMService()
+        
+        # Reuse signal conversion
+        signals = convert_to_qualitative_signals(motivation_data)
+        
+        thread_id = f"{user_id}-goal-{goal_id}"
+        
+        with _opik.trace_context(
+            "ai-goal-motivation-message",
+            input_data={
+                "user_id": user_id, 
+                "goal_title": goal_title,
+                "signals": signals
+            },
+            thread_id=thread_id
+        ) as trace:
+            
+            prompt = build_goal_motivation_message_prompt(
+                goal_title=goal_title,
+                motivation_state=signals["motivation_state"],
+                consistency_state=signals["consistency_state"],
+                vibe_state=signals["vibe_state"],
+                tone=signals["tone"]
+            )
+            
+            message = await gen_llm.generate(prompt)
+            message = message.strip().strip('"').strip("'")
+            
+            trace.set_output({"message": message})
+            
+            return message
+
     async def compute_at_risk_snapshot(
         self, 
         user_id: str, 
         motivation_data: dict,
         recent_checkin_count: int = 0,
-        ai_eval_encouragement: int = 3
+        ai_eval_encouragement: int = 3,
+        goal_title: Optional[str] = None,
+        goal_id: Optional[str] = None
     ) -> dict:
         """
         Compute at-risk snapshot using deterministic heuristics.
@@ -555,7 +700,10 @@ class GoalsService:
         confidence = risk_data["confidence"]
         
         # Thread ID for Opik
-        thread_id = f"motivation-{user_id}"
+        if goal_id:
+            thread_id = f"{user_id}-goal-{goal_id}"
+        else:
+            thread_id = f"motivation-{user_id}"
         
         with _opik.trace_context(
             TraceNames.AT_RISK_SNAPSHOT,

@@ -486,6 +486,118 @@ async def get_motivation_insight(userId: str = "neo", db: AsyncSession = Depends
             "raw_consistency": motivation_data.get("consistency_score"),
             "raw_vibe": motivation_data.get("vibe_score"),
             "at_risk_score": at_risk["risk_score"],
-            "triggered_signals": at_risk["triggered_signals"]
+            "triggered_signals": at_risk["triggered_signals"],
+            "thread_id": f"motivation-{userId}"
+        }
+    }
+
+
+@router.get("/api/insights/goals/{goal_id}", tags=["Insights"])
+async def get_goal_motivation_insight(goal_id: str, userId: str = "neo", db: AsyncSession = Depends(get_db)):
+    """
+    Get motivation insights for a SINGLE goal.
+    On-demand computation.
+    """
+    goals_service = GoalsService(db)
+    
+    # Import presentation utils
+    from services.utils import (
+        determine_motivation_band,
+        get_micro_label,
+        build_risk_exposure_data
+    )
+    
+    # Get Goal details
+    goal = await goals_service.get_goal(goal_id)
+    if not goal:
+        raise HTTPException(status_code=404, detail="Goal not found")
+
+    # --- Calculate motivation ---
+    motivation_data = await goals_service.calculate_goal_motivation_level(userId, goal_id)
+    score = motivation_data["score"]
+    
+    # Save snapshot
+    await goals_service.save_motivation_snapshot(
+        user_id=userId,
+        score=score,
+        consistency_score=motivation_data.get("consistency_score"),
+        vibe_score=motivation_data.get("vibe_score"),
+        goal_id=goal_id
+    )
+    
+    # Get history
+    motivation_history = await goals_service.get_motivation_history(user_id=userId, days=7, goal_id=goal_id)
+    
+    # --- Generate AI message (On-Demand) ---
+    message = await goals_service.generate_goal_motivation_hook(
+        user_id=userId, goal_id=goal_id, goal_title=goal.title, motivation_data=motivation_data
+    )
+    
+    # --- At-risk snapshot ---
+    recent_checkin_count = await goals_service.get_goal_recent_checkin_count(user_id=userId, goal_id=goal_id, days=7)
+    
+    at_risk = await goals_service.compute_at_risk_snapshot(
+        user_id=userId,
+        motivation_data=motivation_data,
+        recent_checkin_count=recent_checkin_count,
+        goal_title=goal.title,
+        goal_id=goal_id
+    )
+    
+    # Presentation Logic
+    band_data = determine_motivation_band(score)
+    motivation_band = band_data["band"]
+    motivation_label = band_data["label"]
+    micro_label = get_micro_label(motivation_band)
+    
+    risk_exposure = build_risk_exposure_data(at_risk)
+    show_alert = risk_exposure["show_alert"]
+    triggered_reasons = risk_exposure["triggered_reasons"]
+    
+    return {
+        "goal_id": goal.id,
+        "goal_title": goal.title,
+        
+        # UI
+        "micro_label": micro_label,
+        "motivation_label": motivation_label,
+        "message": message,
+        "show_alert": show_alert,
+        "alert_explanation": at_risk["ai_explanation"] if show_alert else None,
+        
+        # Motivation breakdown
+        "motivation_breakdown": {
+            "score": score,
+            "consistency": motivation_data.get("consistency_score", 0),
+            "vibe": motivation_data.get("vibe_score", 0)
+        },
+        
+        # Motivation history
+        "motivation_history": motivation_history,
+        
+        # Message Quality
+        "message_quality": {
+            "encouragement": motivation_data.get("eval_encouragement", 3),
+            "alignment": motivation_data.get("eval_alignment", 3),
+            "clarity": motivation_data.get("eval_clarity", 3),
+            "average": motivation_data.get("eval_average", 3.0)
+        },
+        
+        # At-risk data
+        "at_risk": {
+            "level": at_risk["risk_level"],
+            "confidence": at_risk["confidence"],
+            "reasons": triggered_reasons
+        },
+        
+        # Debug layer
+        "_debug": {
+            "level": score,
+            "motivation_band": motivation_band,
+            "raw_consistency": motivation_data.get("consistency_score"),
+            "raw_vibe": motivation_data.get("vibe_score"),
+            "at_risk_score": at_risk["risk_score"],
+            "triggered_signals": at_risk.get("triggered_signals", {}),
+            "thread_id": f"{userId}-goal-{goal.id}"
         }
     }
