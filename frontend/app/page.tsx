@@ -237,8 +237,16 @@ export default function Home() {
                 </div>
 
                 {isInitialLoading && goals.length === 0 ? (
-                  <div className="flex justify-center p-8">
-                    <span className="material-symbols-outlined animate-spin text-primary text-3xl">progress_activity</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="flex flex-col gap-3 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-100 dark:border-gray-700 animate-pulse h-[180px]">
+                        <div className="size-20 mx-auto rounded-full bg-gray-200 dark:bg-gray-700"></div>
+                        <div className="flex flex-col items-center gap-2 mt-2">
+                          <div className="h-4 w-24 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                          <div className="h-3 w-16 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -334,7 +342,19 @@ export default function Home() {
 
               <div className="bg-white dark:bg-white/5 rounded-2xl shadow-sm border border-black/5 dark:border-white/10 p-6">
                 <h4 className="font-bold text-[#121217] dark:text-white mb-4">Recent Check-ins</h4>
-                {recentCheckins.length === 0 ? (
+                {isInitialLoading ? (
+                  <div className="space-y-4 animate-pulse">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="flex gap-3">
+                        <div className="size-8 rounded-full bg-gray-100 dark:bg-gray-800 shrink-0"></div>
+                        <div className="flex-1 space-y-2">
+                          <div className="h-3 bg-gray-100 dark:bg-gray-800 rounded w-3/4"></div>
+                          <div className="h-3 bg-gray-100 dark:bg-gray-800 rounded w-1/2"></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : recentCheckins.length === 0 ? (
                   <p className="text-sm text-gray-500 dark:text-gray-400">No check-ins yet.</p>
                 ) : (
                   <div className="space-y-3">
