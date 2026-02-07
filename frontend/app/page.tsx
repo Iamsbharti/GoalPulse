@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { CATEGORIES } from "@/lib/constants";
@@ -47,9 +47,23 @@ export default function Home() {
   const [selectedGoalForCheckin, setSelectedGoalForCheckin] = useState<Goal | null>(null);
   const [isGoalInsightsOpen, setIsGoalInsightsOpen] = useState(false);
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const settingsRef = useRef<HTMLDivElement>(null);
 
-  const { user, isLoading: authLoading } = useAuth();
+  const { user, isLoading: authLoading, logout } = useAuth();
   const router = useRouter();
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (settingsRef.current && !settingsRef.current.contains(event.target as Node)) {
+        setIsSettingsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   // Redirect if not logged in
   useEffect(() => {
@@ -203,10 +217,32 @@ export default function Home() {
               <span>Stats</span>
             </Link>
           </div>
-          <div className="flex items-center gap-4 border-l border-gray-100 dark:border-gray-800 pl-6">
-            <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">
+          <div ref={settingsRef} className="flex items-center gap-4 border-l border-gray-100 dark:border-gray-800 pl-6 relative">
+            <button
+              onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+            >
               <span className="material-symbols-outlined">settings</span>
             </button>
+
+            {isSettingsOpen && (
+              <div className="absolute top-12 right-0 w-48 bg-white dark:bg-[#1a1a2e] rounded-xl shadow-xl border border-gray-100 dark:border-gray-700 py-2 z-50 animate-in fade-in slide-in-from-top-2">
+                <div className="px-4 py-2 border-b border-gray-100 dark:border-gray-700">
+                  <p className="text-sm font-medium text-[#121217] dark:text-white">{user?.name}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{user?.email}</p>
+                </div>
+                <button
+                  onClick={() => {
+                    logout();
+                    setIsSettingsOpen(false);
+                  }}
+                  className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/10 flex items-center gap-2 transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[18px]">logout</span>
+                  Logout
+                </button>
+              </div>
+            )}
           </div>
         </header>
 
