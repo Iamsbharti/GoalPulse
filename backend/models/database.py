@@ -26,6 +26,7 @@ class User(Base):
     name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True) # Hashed password (or null for default user)
 
     goals: Mapped[List["Goal"]] = relationship("Goal", back_populates="user", cascade="all, delete-orphan")
     checkins: Mapped[List["Checkin"]] = relationship("Checkin", back_populates="user", cascade="all, delete-orphan")

@@ -12,3 +12,7 @@ langchain-ollama
 langchain-openai
 langgraph
 opik
+passlib[bcrypt]
+python-jose[cryptography]
+pydantic[email]
+bcrypt==3.2.2

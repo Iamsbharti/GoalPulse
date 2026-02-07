@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
 import { CATEGORIES } from "@/lib/constants";
 import { getMoodConfig } from "@/lib/mood-constants";
 import { AddResolutionModal } from "@/components/AddResolutionModal";
@@ -37,6 +39,7 @@ export default function Home() {
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isMotivationLoading, setIsMotivationLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   // Modal State
   const [isAddResolutionOpen, setIsAddResolutionOpen] = useState(false);
@@ -45,24 +48,36 @@ export default function Home() {
   const [isGoalInsightsOpen, setIsGoalInsightsOpen] = useState(false);
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
 
+  const { user, isLoading: authLoading } = useAuth();
+  const router = useRouter();
+
+  // Redirect if not logged in
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push("/login");
+    }
+  }, [user, authLoading, router]);
+
   useEffect(() => {
     // Guard to prevent double fetch in React 18 Strict Mode
     let isMounted = true;
+
+    if (!user) return;
 
     const fetchGoals = async () => {
       try {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
         // Fetch Goals & Recent Checkins (Fast)
         const [goalsRes, checkinsRes, leastActiveRes] = await Promise.all([
-          fetch(`${apiUrl}/api/goals?userId=neo`),
-          fetch(`${apiUrl}/api/checkins/recent?userId=neo`),
-          fetch(`${apiUrl}/api/goals/least-active?userId=neo`)
+          fetch(`${apiUrl}/api/goals?userId=${user.id}`),
+          fetch(`${apiUrl}/api/checkins/recent?userId=${user.id}`),
+          fetch(`${apiUrl}/api/goals/least-active?userId=${user.id}`)
         ]);
 
         if (!isMounted) return;
 
         const data = await goalsRes.json();
-        const mappedGoals = data.goals.map((g: any) => {
+        const mappedGoals = (data.goals || []).map((g: any) => {
           const cat = CATEGORIES.find(c => c.id === g.category) || CATEGORIES[2];
           return {
             id: g.id,
@@ -85,7 +100,7 @@ export default function Home() {
 
         // Fetch Motivation Insights
         setIsMotivationLoading(true);
-        const insightsResponse = await fetch(`${apiUrl}/api/insights/motivation?userId=neo`);
+        const insightsResponse = await fetch(`${apiUrl}/api/insights/motivation?userId=${user.id}`);
 
         if (!isMounted) return;
 
@@ -110,9 +125,13 @@ export default function Home() {
     return () => {
       isMounted = false;
     };
-  }, [refreshKey]);
+  }, [refreshKey, user]);
 
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  if (authLoading || (!user && isInitialLoading)) {
+    return <div className="min-h-screen flex items-center justify-center bg-background-light dark:bg-background-dark">
+      <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin"></div>
+    </div>
+  }
 
   return (
     <div className="min-h-screen bg-background-light dark:bg-background-dark flex">
@@ -150,7 +169,7 @@ export default function Home() {
             </div>
             {isSidebarOpen && (
               <div className="flex-1">
-                <p className="text-sm font-medium text-[#121217] dark:text-white">Neo</p>
+                <p className="text-sm font-medium text-[#121217] dark:text-white">{user?.name || 'User'}</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">Pro Member</p>
               </div>
             )}
@@ -164,7 +183,7 @@ export default function Home() {
             <span className="material-symbols-outlined">menu</span>
           </button>
           <div className="flex-1">
-            <h2 className="text-2xl font-bold text-[#121217] dark:text-white">Good morning, Neo!</h2>
+            <h2 className="text-2xl font-bold text-[#121217] dark:text-white">Good morning, {user?.name?.split(' ')[0] || 'User'}!</h2>
             <p className="text-sm text-primary font-medium">Ready to crush your goals?</p>
           </div>
           <div className="hidden xl:flex items-center gap-2 mr-6">

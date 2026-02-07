@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Loader2, X } from "lucide-react";
 import { MOOD_LIST, MOODS } from "@/lib/mood-constants";
+import { useAuth } from "@/context/AuthContext";
 
 interface CheckInModalProps {
   isOpen: boolean;
@@ -13,6 +14,7 @@ interface CheckInModalProps {
 }
 
 export function CheckInModal({ isOpen, onClose, goalId, goalTitle, onCheckInComplete }: CheckInModalProps) {
+  const { user } = useAuth();
   const [progress, setProgress] = useState("YES");
   const [mood, setMood] = useState<string>(MOODS.GOOD.value);
   const [response, setResponse] = useState("");
@@ -26,7 +28,7 @@ export function CheckInModal({ isOpen, onClose, goalId, goalTitle, onCheckInComp
     setIsSubmitting(true);
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-      const res = await fetch(`${apiUrl}/api/goals/${goalId}/checkins`, {
+      const res = await fetch(`${apiUrl}/api/goals/${goalId}/checkins?userId=${user?.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ progress, mood, response }),

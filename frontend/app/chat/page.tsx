@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo, Suspense } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Loader2 } from "lucide-react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { useAuth } from "@/context/AuthContext";
 
 const ReactMarkdown = dynamic(() => import("react-markdown"), {
   loading: () => <span className="text-gray-400">Loading...</span>,
@@ -49,6 +50,14 @@ const DEFAULT_WELCOME_MESSAGE: Message = {
 };
 
 function ChatContent() {
+  const { user, isLoading: authLoading } = useAuth();
+  const router = useRouter();
+
+  // Redirect if not logged in
+  useEffect(() => {
+    if (!authLoading && !user) router.push("/login");
+  }, [user, authLoading, router]);
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [input, setInput] = useState("");
@@ -82,15 +91,16 @@ function ChatContent() {
   }, [messages.length, hasInitialized]);
 
   const fetchGoals = useCallback(async () => {
+    if (!user) return;
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-      const response = await fetch(`${apiUrl}/api/goals?userId=neo`);
+      const response = await fetch(`${apiUrl}/api/goals?userId=${user.id}`);
       const data = await response.json();
       setGoals(data.goals || []);
     } catch (error) {
       console.error("Error fetching goals:", error);
     }
-  }, []);
+  }, [user]);
 
   const isValidMessage = (msg: unknown): msg is Message => {
     if (!msg || typeof msg !== 'object') return false;
@@ -144,7 +154,7 @@ function ChatContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: messageText,
-          userId: "neo",
+          userId: user?.id || "neo",
         }),
       });
 
@@ -233,6 +243,9 @@ function ChatContent() {
       setMessages([]);
       setIsLoading(true);
 
+      // Fetch goals since we bypassed initializeChat
+      fetchGoals();
+
       // Trigger the coaching session start
       const startCoaching = async () => {
         try {
@@ -242,7 +255,7 @@ function ChatContent() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               message: "START_COACHING",
-              userId: "neo",
+              userId: user?.id || "neo",
               goalId: goalIdParam
             })
           });
@@ -270,7 +283,17 @@ function ChatContent() {
         initializeChat();
       }
     }
-  }, [goalIdParam, initializeChat, hasInitialized]);
+  }, [goalIdParam, initializeChat, hasInitialized, fetchGoals]);
+
+  // Ensure selected goal is visible in tabs
+  useEffect(() => {
+    if (selectedGoal && goals.length > 0) {
+      const index = goals.findIndex(g => g.id === selectedGoal);
+      if (index >= 4) {
+        setShowAllGoals(true);
+      }
+    }
+  }, [selectedGoal, goals]);
 
   const sendMessage = useCallback(async (messageText?: string) => {
     const textToSend = messageText || inputRef.current.trim();
@@ -297,7 +320,7 @@ function ChatContent() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             message: textToSend,
-            userId: "neo",
+            userId: user?.id || "neo",
             goalId: selectedGoal,
             messages: messages.map(m => ({ role: m.role, content: m.content })),
           }),
@@ -327,7 +350,7 @@ function ChatContent() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               message: textToSend,
-              userId: "neo",
+              userId: user?.id || "neo",
               goalId: selectedGoal, // This is null here based on logic
             }),
           });
@@ -424,7 +447,7 @@ function ChatContent() {
             </div>
             {isSidebarOpen && (
               <div className="flex-1">
-                <p className="text-sm font-medium text-[#121217] dark:text-white">Neo</p>
+                <p className="text-sm font-medium text-[#121217] dark:text-white">{user?.name || "User"}</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">Pro Member</p>
               </div>
             )}
@@ -447,7 +470,7 @@ function ChatContent() {
                 <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
               </div>
               <p className="text-xs text-[#686586] dark:text-gray-400 font-medium">Your AI Accountability Partner</p>
-              
+
             </div>
             <div className="hidden xl:flex items-center gap-2 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 px-3 py-1.5 rounded-full ml-6">
               <span className="material-symbols-outlined text-primary text-base">lightbulb</span>

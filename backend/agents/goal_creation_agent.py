@@ -448,7 +448,7 @@ async def create_goal(state: GoalCreationState) -> GoalCreationState:
     from models.database import AsyncSessionLocal
     
     draft = state.get("goal_draft", {}) or {}
-    user_id = state.get("user_id", "neo")
+    user_id = state["user_id"]
     
     try:
         async with AsyncSessionLocal() as session:

@@ -2,11 +2,17 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 import { CheckInModal } from "@/components/CheckInModal";
 import { CheckinHistoryModal } from "@/components/CheckinHistoryModal";
 import { EditResolutionModal } from "@/components/EditResolutionModal";
 import GoalInsightsModal from "@/components/GoalInsightsModal";
+
+// ... (Goal, CoachPersona interfaces - keeping same)
+// ... (personas array - keeping same)
+// ... (CATEGORIES, STATUS_COLORS imports - keeping same)
 
 interface Goal {
   id: string;
@@ -30,15 +36,20 @@ const personas: CoachPersona[] = [
   { id: "cheerleader", name: "Cheerleader", description: "High energy, constant encouragement and positivity.", icon: "sentiment_very_satisfied", iconBg: "bg-yellow-100", iconColor: "text-yellow-600" },
   { id: "analytical", name: "Analytical", description: "Data-driven insights, focus on patterns and logic.", icon: "monitoring", iconBg: "bg-blue-100", iconColor: "text-blue-600" },
   { id: "tough_love", name: "Tough Love", description: "No excuses, direct communication and high-accountability.", icon: "military_tech", iconBg: "bg-red-100", iconColor: "text-red-600" },
-  { id: "tough_love", name: "Tough Love", description: "No excuses, direct communication and high-accountability.", icon: "military_tech", iconBg: "bg-red-100", iconColor: "text-red-600" },
 ];
 
-import { CATEGORIES, STATUS_COLORS } from "@/lib/constants";
+import { CATEGORIES } from "@/lib/constants";
 import { DeleteConfirmationModal } from "@/components/DeleteConfirmationModal";
 
-
-
 export default function GoalsPage() {
+  const { user, isLoading: authLoading } = useAuth();
+  const router = useRouter();
+
+  // Redirect if not logged in
+  useEffect(() => {
+    if (!authLoading && !user) router.push("/login");
+  }, [user, authLoading, router]);
+
   const [goals, setGoals] = useState<Goal[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
@@ -69,9 +80,10 @@ export default function GoalsPage() {
   const selectedPersonaData = personas.find(p => p.id === selectedPersona);
 
   const fetchGoals = async () => {
+    if (!user) return;
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-      const response = await fetch(`${apiUrl}/api/goals?userId=neo`);
+      const response = await fetch(`${apiUrl}/api/goals?userId=${user.id}`);
       const data = await response.json();
       setGoals(data.goals);
     } catch (error) {
@@ -83,7 +95,7 @@ export default function GoalsPage() {
 
   useEffect(() => {
     fetchGoals();
-  }, [refreshKey]);
+  }, [refreshKey, user]);
 
   const generateDescription = async () => {
     if (!title) return;
@@ -121,7 +133,7 @@ export default function GoalsPage() {
 
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-      const response = await fetch(`${apiUrl}/api/goals`, {
+      const response = await fetch(`${apiUrl}/api/goals?userId=${user?.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -222,7 +234,7 @@ export default function GoalsPage() {
               </div>
               {isSidebarOpen && (
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-[#121217] dark:text-white">Alex</p>
+                  <p className="text-sm font-medium text-[#121217] dark:text-white">{user?.name || "User"}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">Pro Member</p>
                 </div>
               )}
@@ -525,7 +537,7 @@ export default function GoalsPage() {
             </div>
             {isSidebarOpen && (
               <div className="flex-1">
-                <p className="text-sm font-medium text-[#121217] dark:text-white">Alex</p>
+                <p className="text-sm font-medium text-[#121217] dark:text-white">{user?.name || "User"}</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">Pro Member</p>
               </div>
             )}
@@ -564,8 +576,8 @@ export default function GoalsPage() {
 
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-20">
-                <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin mb-4"></div>
-                <p className="text-gray-500 animate-pulse">Loading Your Resolutions...</p>
+              <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin mb-4"></div>
+              <p className="text-gray-500 animate-pulse">Loading Your Resolutions...</p>
             </div>
           ) : goals.length === 0 ? (
             <div className="text-center py-16 bg-white dark:bg-white/5 rounded-2xl border border-gray-100 dark:border-gray-800">

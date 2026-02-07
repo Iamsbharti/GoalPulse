@@ -134,8 +134,11 @@ def opik_health_check():
     opik_client = get_opik_client()
     return opik_client.check_health()
 
+from api.auth import router as auth_router
+
 # Include the API routes
 app.include_router(api_router)
+app.include_router(auth_router)
 
 if __name__ == "__main__":
     import uvicorn

@@ -409,7 +409,7 @@ export function AtRiskCard({ atRisk, explanation, goalId }: { atRisk: AtRiskData
                 href={`/chat?goalId=${goalId}`}
                 className={`mt-4 inline-flex items-center gap-2 px-4 py-2 ${isHigh ? 'bg-red-500' : 'bg-amber-500'} text-white rounded-lg text-sm font-bold hover:opacity-90 transition-opacity`}
             >
-                Talk to Pulse AI
+                Talk to Coach Aura
                 <span className="material-symbols-outlined text-sm">arrow_forward</span>
             </Link>
         </div>

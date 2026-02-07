@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { Loader2, X } from "lucide-react";
 import { getMoodConfig } from "@/lib/mood-constants";
+import { useAuth } from "@/context/AuthContext";
 
 interface Checkin {
   id: string;
@@ -22,23 +23,25 @@ interface CheckinHistoryModalProps {
 }
 
 export function CheckinHistoryModal({ isOpen, onClose, goalId, goalTitle }: CheckinHistoryModalProps) {
+  const { user } = useAuth();
   const [checkins, setCheckins] = useState<Checkin[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const fetchedRef = useRef(false);
 
   useEffect(() => {
     // Only fetch when modal opens AND we haven't fetched for this goal yet
-    if (isOpen && !fetchedRef.current) {
+    if (isOpen && !fetchedRef.current && user) {
       fetchedRef.current = true;
       fetchCheckins();
     }
-  }, [isOpen, goalId]);
+  }, [isOpen, goalId, user]);
 
   const fetchCheckins = async () => {
+    if (!user) return;
     setIsLoading(true);
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-      const response = await fetch(`${apiUrl}/api/goals/${goalId}/checkins`);
+      const response = await fetch(`${apiUrl}/api/goals/${goalId}/checkins?userId=${user.id}`);
       const data = await response.json();
       setCheckins(data.checkins || []);
     } catch (error) {

@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useState, useEffect, useRef } from "react";
 
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
 import {
   MotivationBreakdownCard,
   MotivationTrendSparkline,
@@ -15,22 +17,28 @@ import {
 
 
 export default function InsightsPage() {
+  const { user, isLoading: authLoading } = useAuth();
+  const router = useRouter();
+
+  // Redirect if not logged in
+  useEffect(() => {
+    if (!authLoading && !user) router.push("/login");
+  }, [user, authLoading, router]);
+
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [insights, setInsights] = useState<InsightsData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const hasFetched = useRef(false);
 
-  // In production, this would come from auth context
-  const userId = "neo";
-
   useEffect(() => {
+    if (!user) return;
     if (hasFetched.current) return;
     hasFetched.current = true;
 
     const fetchInsights = async () => {
       try {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-        const response = await fetch(`${apiUrl}/api/insights/motivation?userId=${userId}`);
+        const response = await fetch(`${apiUrl}/api/insights/motivation?userId=${user.id}`);
         if (response.ok) {
           const data = await response.json();
           setInsights(data);
@@ -43,7 +51,7 @@ export default function InsightsPage() {
     };
 
     fetchInsights();
-  }, []);
+  }, [user]);
 
   return (
     <div className="min-h-screen bg-background-light dark:bg-background-dark text-[#121217] dark:text-white flex">
@@ -81,7 +89,7 @@ export default function InsightsPage() {
             </div>
             {isSidebarOpen && (
               <div className="flex-1">
-                <p className="text-sm font-medium text-[#121217] dark:text-white">Neo</p>
+                <p className="text-sm font-medium text-[#121217] dark:text-white">{user?.name || "User"}</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">Pro Member</p>
               </div>
             )}
@@ -111,8 +119,8 @@ export default function InsightsPage() {
 
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-20">
-                <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin mb-4"></div>
-                <p className="text-gray-500 animate-pulse">Analyzing motivation insights...</p>
+              <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin mb-4"></div>
+              <p className="text-gray-500 animate-pulse">Analyzing motivation insights...</p>
             </div>
           ) : insights ? (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -138,7 +146,7 @@ export default function InsightsPage() {
                 <MotivationTrendSparkline history={insights.motivation_history} />
               </div>
 
-              <InsightsRightPanel insights={insights} goalId={insights.goal_id}/>
+              <InsightsRightPanel insights={insights} goalId={insights.goal_id} />
             </div>
           ) : (
             <div className="text-center py-20">

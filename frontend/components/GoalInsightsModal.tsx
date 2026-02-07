@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useAuth } from "@/context/AuthContext";
 import {
     MotivationBreakdownCard,
     MotivationTrendSparkline,
@@ -18,12 +19,10 @@ interface GoalInsightsModalProps {
 }
 
 export default function GoalInsightsModal({ goalId, isOpen, onClose }: GoalInsightsModalProps) {
+    const { user } = useAuth();
     const [insights, setInsights] = useState<InsightsData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const lastFetchedGoalId = useRef<string | null>(null);
-
-    // In production, this comes from auth context
-    const userId = "neo";
 
     // Reset fetch state when modal closes so it refetches next time
     useEffect(() => {
@@ -33,7 +32,7 @@ export default function GoalInsightsModal({ goalId, isOpen, onClose }: GoalInsig
     }, [isOpen]);
 
     useEffect(() => {
-        if (!isOpen || !goalId) return;
+        if (!isOpen || !goalId || !user) return;
 
         // Prevent double fetch (Strict Mode)
         if (lastFetchedGoalId.current === goalId) return;
@@ -46,7 +45,7 @@ export default function GoalInsightsModal({ goalId, isOpen, onClose }: GoalInsig
         const fetchInsights = async () => {
             try {
                 const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-                const response = await fetch(`${apiUrl}/api/insights/goals/${goalId}?userId=${userId}`);
+                const response = await fetch(`${apiUrl}/api/insights/goals/${goalId}?userId=${user.id}`);
 
                 if (response.ok) {
                     const data = await response.json();
@@ -60,7 +59,7 @@ export default function GoalInsightsModal({ goalId, isOpen, onClose }: GoalInsig
         };
 
         fetchInsights();
-    }, [goalId, isOpen]);
+    }, [goalId, isOpen, user]);
 
     if (!isOpen) return null;
 

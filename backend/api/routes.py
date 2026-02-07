@@ -24,13 +24,13 @@ _opik = get_opik_client()
 
 class ChatRequest(BaseModel):
     message: str
-    userId: str = "neo"
+    userId: str
     goalId: Optional[str] = None
     messages: Optional[List[Dict[str, str]]] = []
 
 class ProcessGoalMessageRequest(BaseModel):
     message: str
-    userId: str = "neo"
+    userId: str
     existing_goal_draft: Optional[Dict[str, Any]] = None
 
 class CreateGoalFromChatRequest(BaseModel):
@@ -38,7 +38,7 @@ class CreateGoalFromChatRequest(BaseModel):
     description: str
     category: str
     checkin_frequency_days: int = 3
-    userId: str = "neo"
+    userId: str
 
 class GenerateDescriptionRequest(BaseModel):
     title: str
@@ -211,14 +211,14 @@ async def generate_description(request: GenerateDescriptionRequest):
     return {"description": description}
 
 @router.get("/api/goals", tags=["Goals"])
-async def list_goals(userId: str = "neo", db: AsyncSession = Depends(get_db)):
+async def list_goals(userId: str, db: AsyncSession = Depends(get_db)):
     """List all goals for a user."""
     goals_service = GoalsService(db)
     goals = await goals_service.get_user_goals(userId)
     return {"goals": goals}
 
 @router.post("/api/goals", tags=["Goals"])
-async def create_goal(request: CreateGoalRequest, userId: str = "neo", db: AsyncSession = Depends(get_db)):
+async def create_goal(request: CreateGoalRequest, userId: str, db: AsyncSession = Depends(get_db)):
     """Create a new goal (form-based, not chat-based)."""
     goals_service = GoalsService(db)
     
@@ -245,7 +245,7 @@ async def create_goal(request: CreateGoalRequest, userId: str = "neo", db: Async
     }
 
 @router.get("/api/goals/least-active", tags=["Goals"])
-async def get_least_active_goals(userId: str = "neo", db: AsyncSession = Depends(get_db)):
+async def get_least_active_goals(userId: str, db: AsyncSession = Depends(get_db)):
     """Get goals with the least recent check-in activity."""
     goals_service = GoalsService(db)
     goals = await goals_service.get_least_active_goals(userId)
@@ -285,7 +285,7 @@ async def delete_goal(goal_id: str, db: AsyncSession = Depends(get_db)):
     return {"message": f"Goal {goal_id} deleted"}
 
 @router.get("/api/goals/{goal_id}/checkins", tags=["Check-ins"])
-async def list_checkins(goal_id: str, userId: str = "neo", db: AsyncSession = Depends(get_db)):
+async def list_checkins(goal_id: str, userId: str, db: AsyncSession = Depends(get_db)):
     """List all check-ins for a specific goal."""
     goals_service = GoalsService(db)
     checkins = await goals_service.get_goal_checkins(goal_id)
@@ -301,7 +301,7 @@ async def list_checkins(goal_id: str, userId: str = "neo", db: AsyncSession = De
     return {"checkins": checkins}
 
 @router.post("/api/goals/{goal_id}/checkins", tags=["Check-ins"])
-async def create_checkin(goal_id: str, request: CreateCheckinRequest, userId: str = "neo", db: AsyncSession = Depends(get_db)):
+async def create_checkin(goal_id: str, request: CreateCheckinRequest, userId: str, db: AsyncSession = Depends(get_db)):
     """
     Create a check-in for a goal.
     
@@ -349,7 +349,7 @@ async def create_checkin(goal_id: str, request: CreateCheckinRequest, userId: st
     }
 
 @router.get("/api/checkins/recent", tags=["Check-ins"])
-async def get_recent_checkins(userId: str = "neo", db: AsyncSession = Depends(get_db)):
+async def get_recent_checkins(userId: str, db: AsyncSession = Depends(get_db)):
     """Get the most recent check-ins for a user (for dashboard feed)."""
     goals_service = GoalsService(db)
     checkins = await goals_service.get_user_recent_checkins(userId)
@@ -383,7 +383,7 @@ async def get_recent_checkins(userId: str = "neo", db: AsyncSession = Depends(ge
 
 
 @router.get("/api/insights/motivation", tags=["Insights"])
-async def get_motivation_insight(userId: str = "neo", db: AsyncSession = Depends(get_db)):
+async def get_motivation_insight(userId: str, db: AsyncSession = Depends(get_db)):
     """
     Get comprehensive motivation insights for the Insights page.
     
@@ -486,7 +486,7 @@ async def get_motivation_insight(userId: str = "neo", db: AsyncSession = Depends
 
 
 @router.get("/api/insights/goals/{goal_id}", tags=["Insights"])
-async def get_goal_motivation_insight(goal_id: str, userId: str = "neo", db: AsyncSession = Depends(get_db)):
+async def get_goal_motivation_insight(goal_id: str, userId: str, db: AsyncSession = Depends(get_db)):
     """
     Get motivation insights for a SINGLE goal.
     On-demand computation.
