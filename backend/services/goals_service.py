@@ -112,6 +112,16 @@ class GoalsService:
         )
         return list(result.scalars().all())
 
+    async def get_goal_checkins(self, goal_id: str, limit: int = 5) -> List[Checkin]:
+        """Get recent checkins for a specific goal."""
+        result = await self.session.execute(
+            select(Checkin)
+            .where(Checkin.goal_id == goal_id)
+            .order_by(Checkin.created_at.desc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
     async def get_recent_checkin_count(self, user_id: str, days: int = 7) -> int:
         """
         Get the count of check-ins within the last N days.

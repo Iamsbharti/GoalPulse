@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Loader2 } from "lucide-react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -47,7 +48,7 @@ const DEFAULT_WELCOME_MESSAGE: Message = {
   timestamp: new Date().toISOString(),
 };
 
-export default function ChatPage() {
+function ChatContent() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [input, setInput] = useState("");
@@ -63,6 +64,8 @@ export default function ChatPage() {
   // Goal creation state
   const [pendingGoalDraft, setPendingGoalDraft] = useState<GoalDraft | null>(null);
   const [isProcessingGoal, setIsProcessingGoal] = useState(false);
+
+  const [showAllGoals, setShowAllGoals] = useState(false);
 
   useEffect(() => {
     inputRef.current = input;
@@ -128,13 +131,9 @@ export default function ChatPage() {
     }
   };
 
-  useEffect(() => {
-    initializeChat();
-  }, [initializeChat]);
-
   const clearChat = () => {
-    setMessages([DEFAULT_WELCOME_MESSAGE]);
-    setPendingGoalDraft(null);
+    // Force reload to clear state and remove URL params
+    window.location.href = '/chat';
   };
 
   const processGoalMessage = async (messageText: string) => {
@@ -216,6 +215,63 @@ export default function ChatPage() {
     }
   };
 
+  // Handle URL params for coaching
+  const searchParams = useSearchParams();
+  const goalIdParam = searchParams.get('goalId');
+  const initializedGoalRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (goalIdParam && goalIdParam !== "undefined" && goalIdParam !== "null") {
+      // Prevent double initialization for the same goal
+      if (initializedGoalRef.current === goalIdParam) return;
+
+      initializedGoalRef.current = goalIdParam;
+      setSelectedGoal(goalIdParam);
+
+      // If we have a goalId, we start in coaching mode
+      // Clear previous messages if they are default
+      setMessages([]);
+      setIsLoading(true);
+
+      // Trigger the coaching session start
+      const startCoaching = async () => {
+        try {
+          const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+          const response = await fetch(`${apiUrl}/api/chat/coaching`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              message: "START_COACHING",
+              userId: "neo",
+              goalId: goalIdParam
+            })
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            setMessages([{
+              id: Date.now().toString(),
+              role: "assistant",
+              content: data.response,
+              timestamp: new Date().toISOString()
+            }]);
+          }
+        } catch (e) {
+          console.error("Failed to start coaching", e);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      startCoaching();
+      setHasInitialized(true);
+    } else {
+      if (!hasInitialized && !initializedGoalRef.current) {
+        initializeChat();
+      }
+    }
+  }, [goalIdParam, initializeChat, hasInitialized]);
+
   const sendMessage = useCallback(async (messageText?: string) => {
     const textToSend = messageText || inputRef.current.trim();
     if (!textToSend || isSending) return;
@@ -232,36 +288,65 @@ export default function ChatPage() {
     setIsSending(true);
 
     try {
-      // First, try to process as a goal creation message
-      const processed = await processGoalMessage(textToSend);
-
-      if (!processed) {
-        // Use regular chat if no goal intent
+      // Logic Branch: Coaching vs Regular Chat
+      if (selectedGoal && selectedGoal !== "undefined" && selectedGoal !== "null") {
+        // COACHING MODE
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-        const response = await fetch(`${apiUrl}/api/chat`, {
+        const response = await fetch(`${apiUrl}/api/chat/coaching`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             message: textToSend,
             userId: "neo",
             goalId: selectedGoal,
+            messages: messages.map(m => ({ role: m.role, content: m.content })),
           }),
         });
 
-        if (!response.ok) {
-          throw new Error("Failed to send message");
-        }
+        if (!response.ok) throw new Error("Coaching API failed");
 
         const data = await response.json();
-
         const assistantMessage: Message = {
           id: (Date.now() + 1).toString(),
           role: "assistant",
-          content: data.response || "I'm here to help! Tell me more about your goals.",
+          content: data.response,
           timestamp: new Date().toISOString(),
         };
-
         setMessages((prev) => [...prev, assistantMessage]);
+
+      } else {
+        // REGULAR CHAT MODE (Existing Logic)
+        // First, try to process as a goal creation message
+        const processed = await processGoalMessage(textToSend);
+
+        if (!processed) {
+          // Use regular chat if no goal intent
+          const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+          const response = await fetch(`${apiUrl}/api/chat`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              message: textToSend,
+              userId: "neo",
+              goalId: selectedGoal, // This is null here based on logic
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error("Failed to send message");
+          }
+
+          const data = await response.json();
+
+          const assistantMessage: Message = {
+            id: (Date.now() + 1).toString(),
+            role: "assistant",
+            content: data.response || "I'm here to help! Tell me more about your goals.",
+            timestamp: new Date().toISOString(),
+          };
+
+          setMessages((prev) => [...prev, assistantMessage]);
+        }
       }
     } catch (error) {
       console.error("Error sending message:", error);
@@ -275,7 +360,7 @@ export default function ChatPage() {
     } finally {
       setIsSending(false);
     }
-  }, [isSending, selectedGoal]);
+  }, [isSending, selectedGoal, processGoalMessage, messages]);
 
   // Confirm goal: send "yes" through chat flow to keep LangGraph traces connected
   const confirmGoal = useCallback(async () => {
@@ -362,6 +447,13 @@ export default function ChatPage() {
                 <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
               </div>
               <p className="text-xs text-[#686586] dark:text-gray-400 font-medium">Your AI Accountability Partner</p>
+              
+            </div>
+            <div className="hidden xl:flex items-center gap-2 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 px-3 py-1.5 rounded-full ml-6">
+              <span className="material-symbols-outlined text-primary text-base">lightbulb</span>
+              <p className="text-xs text-gray-600 dark:text-gray-300 font-medium">
+                <span className="font-bold text-primary">Tip:</span> Select a goal tab to check-in or get specific coaching
+              </p>
             </div>
           </div>
           <div className="flex-1"></div>
@@ -382,7 +474,7 @@ export default function ChatPage() {
         <div className="flex-1 flex flex-col max-w-5xl mx-auto w-full">
           {goals.length > 0 && (
             <div className="px-4 lg:px-6 py-3 border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50">
-              {/* <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+              {<div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={() => setSelectedGoal(null)}
                   className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap ${selectedGoal === null
@@ -393,7 +485,7 @@ export default function ChatPage() {
                   <span className="material-symbols-outlined text-sm">all_inclusive</span>
                   All Goals
                 </button>
-                {goals.map((goal) => (
+                {goals.slice(0, showAllGoals ? undefined : 4).map((goal) => (
                   <button
                     key={goal.id}
                     onClick={() => setSelectedGoal(goal.id)}
@@ -406,34 +498,40 @@ export default function ChatPage() {
                     {goal.title.length > 15 ? goal.title.substring(0, 15) + "..." : goal.title}
                   </button>
                 ))}
-              </div> */}
+
+                {goals.length > 2 && (
+                  <button
+                    onClick={() => setShowAllGoals(!showAllGoals)}
+                    className="flex items-center gap-1 px-3 py-1 text-xs font-medium text-gray-500 hover:text-primary transition-colors"
+                  >
+                    {showAllGoals ? (
+                      <>
+                        <span className="material-symbols-outlined text-sm">expand_less</span>
+                        Show Less
+                      </>
+                    ) : (
+                      <>
+                        <span className="material-symbols-outlined text-sm">expand_more</span>
+                        +{goals.length - 4} More
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>}
             </div>
           )}
 
           <ErrorBoundary>
             <main ref={mainContainerRef} className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-6 no-scrollbar">
               {isLoading ? (
-                <div className="flex flex-col items-center justify-center h-full space-y-4">
-                  <div className="relative">
-                    <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-                      <div className="w-full h-full bg-gradient-to-tr from-primary to-indigo-300 opacity-80 animate-pulse"></div>
-                    </div>
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <Loader2 className="animate-spin text-primary" size={24} />
-                    </div>
-                  </div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Loading your conversation...</p>
+                <div className="flex flex-col items-center justify-center py-20">
+                  <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin mb-4"></div>
+                  <p className="text-gray-500 animate-pulse">Loading your conversation...</p>
                 </div>
               ) : (
                 <>
-                  {messages.length === 0 && (
-                    <div className="flex flex-col items-center justify-center h-full space-y-4">
-                      <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-                        <span className="material-symbols-outlined text-primary text-3xl">forum</span>
-                      </div>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">Start a conversation with Coach Aura</p>
-                    </div>
-                  )}
+
+
                   {messages.map((message) => (
                     <div key={message.id} className={`flex flex-col ${message.role === "user" ? "items-end" : "items-start"}`}>
                       {message.role === "assistant" && (
@@ -558,19 +656,6 @@ export default function ChatPage() {
                 </button>
               </div>
             )}
-
-            {/* <div className="flex gap-2 overflow-x-auto no-scrollbar pb-3 mb-3">
-              {quickReplies.map((reply) => (
-                <button
-                  key={reply.id}
-                  onClick={() => sendMessage(reply.text)}
-                  disabled={isSending}
-                  className="flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-xl bg-primary/10 border border-primary/20 px-4 hover:bg-primary/20 transition-colors disabled:opacity-50"
-                >
-                  <p className="text-primary dark:text-indigo-300 text-sm font-semibold">{reply.text}</p>
-                </button>
-              ))}
-            </div> */}
             <div className="flex items-center gap-3 bg-gray-100 dark:bg-gray-800 rounded-2xl px-4 py-3 focus-within:ring-2 focus-within:ring-primary/30 transition-all">
               <button className="text-[#686586] dark:text-gray-400 hover:text-primary transition-colors">
                 <span className="material-symbols-outlined text-2xl">add_circle</span>
@@ -585,9 +670,6 @@ export default function ChatPage() {
                 disabled={isSending}
               />
               <div className="flex items-center gap-2">
-                <button className="text-[#686586] dark:text-gray-400 hover:text-primary transition-colors p-2">
-                  <span className="material-symbols-outlined">mic</span>
-                </button>
                 <button
                   onClick={() => sendMessage()}
                   disabled={isSending || !input.trim()}
@@ -632,5 +714,13 @@ export default function ChatPage() {
         </div>
       </nav>
     </div>
+  );
+}
+
+export default function ChatPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><Loader2 className="animate-spin text-primary" size={32} /></div>}>
+      <ChatContent />
+    </Suspense>
   );
 }

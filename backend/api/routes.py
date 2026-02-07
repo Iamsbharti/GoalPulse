@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from services.llm_service import LLMService
 from services.goals_service import GoalsService
 from agents.goal_creation_agent import goal_creation_agent
+from agents.coaching_agent import coaching_agent
 from models.database import get_db
 from observability import get_opik_client, TraceNames
 from sqlalchemy import select, func
@@ -25,6 +26,7 @@ class ChatRequest(BaseModel):
     message: str
     userId: str = "neo"
     goalId: Optional[str] = None
+    messages: Optional[List[Dict[str, str]]] = []
 
 class ProcessGoalMessageRequest(BaseModel):
     message: str
@@ -114,96 +116,87 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     llm = LLMService()
     
     system_prompt = f"""You are GoalPulse, an AI accountability partner.
-Current User: {request.userId}
+        Current User: {request.userId}
 
-About GoalPulse:
-- We help users track goals and stay accountable.
-- Users can set New Year resolutions or any personal goals.
-- We check in every 2 days.
+        About GoalPulse:
+        - We help users track goals and stay accountable.
+        - Users can set New Year resolutions or any personal goals.
+        - We check in every 2 days.
 
-Instructions:
-1. Answer questions about the app (what it offers, how it works).
-2. Keep responses helpful, encouraging, and concise.
-3. If the user wants to create a goal, encourage them with phrases like "I want to..." or "My goal is..."
+        Instructions:
+        1. Answer questions about the app (what it offers, how it works).
+        2. Keep responses helpful, encouraging, and concise.
+        3. If the user wants to create a goal, encourage them with phrases like "I want to..." or "My goal is..."
 
-User's Message: {request.message}
-"""
+        User's Message: {request.message}
+        """
 
     response_text = await llm.generate(system_prompt)
     print(f"DEBUG - Normal chat response: {response_text}")
 
     return {"response": response_text, "agent": "chat", "has_goal_intent": False}
 
-@router.post("/api/goals/from-chat", tags=["Goals"])
-async def create_goal_from_chat(request: CreateGoalFromChatRequest, db: AsyncSession = Depends(get_db)):
+@router.post("/api/chat/coaching", tags=["Chat"])
+async def coaching_chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     """
-    Create a goal from chat after user confirmation.
+    Goal Coaching Logic
     
-    Called when the user confirms a goal preview in the chat interface.
-    Returns the created goal along with an AI-generated acknowledgment message.
+    Handles:
+    - Context loading (deterministic)
+    - Intent classification
+    - Check-ins via chat
+    - Emotional mirroring
     """
-    goals_service = GoalsService(db)
-    llm = LLMService()
+    if not request.goalId:
+        raise HTTPException(status_code=400, detail="goalId is required for coaching")
 
-    # Validate inputs
-    if not request.title or not request.description:
-        raise HTTPException(status_code=400, detail="Title and description are required")
-
-    if request.category not in ["health", "productivity", "finance", "learning", "personal"]:
-        raise HTTPException(status_code=400, detail="Invalid category")
-
-    if request.checkin_frequency_days < 1 or request.checkin_frequency_days > 7:
-        raise HTTPException(status_code=400, detail="Check-in frequency must be between 1 and 7 days")
-
-    try:
-        # Create the goal
-        goal = await goals_service.create_goal(
-            user_id=request.userId,
-            title=request.title,
-            description=request.description,
-            category=request.category
-        )
-
-        # Generate acknowledgment message
-        ack_prompt = f"""You are an accountability coach. Acknowledge the creation of a new goal.
-Keep it motivating but grounded. Max 2 sentences, no emojis.
-
-Goal title: "{request.title}"
-"""
-        ack_message = await llm.generate(ack_prompt)
+    # Opik Thread ID: coaching-{user_id}-{goal_id}
+    # This groups the entire coaching session in Opik
+    thread_id = f"coaching-{request.userId}-{request.goalId}"
+    
+    # Initialize State
+    initial_state = {
+        "user_id": request.userId,
+        "goal_id": request.goalId,
+        "current_input": request.message,
+        "messages": request.messages or [], # We don't persist history in DB yet, relied on Opik for visibility
+        "context": None,
+        "intent": None,
+        "response": None,
+        "checkin_data": None
+    }
+    
+    print(f"DEBUG - Coaching chat for goal {request.goalId}: {request.message}")
+    
+    with _opik.trace_context(
+        "coaching-session-turn", 
+        input_data=initial_state,
+        thread_id=thread_id
+    ) as trace:
         
-        # Log Opik span for button-based goal creation
-        _opik.log_span("create_goal", {
-            "goal_id": str(goal.id),
-            "title": goal.title,
-            "category": goal.category,
-            "source": "button_confirm",
-            "success": True
-        })
-
-        return {
-            "success": True,
-            "goal": {
-                "id": goal.id,
-                "title": goal.title,
-                "description": goal.description,
-                "category": goal.category,
-                "status": goal.status
-            },
-            "acknowledgment": ack_message.strip()
-        }
-    except Exception as e:
-        print(f"Error creating goal from chat: {e}")
-        
-        # Log Opik span for failure
-        _opik.log_span("create_goal", {
-            "title": request.title,
-            "source": "button_confirm",
-            "error": str(e),
-            "success": False
-        })
-        
-        raise HTTPException(status_code=500, detail=str(e))
+        # Invoke Agent
+        try:
+            result = await coaching_agent.ainvoke(
+                initial_state, 
+                config={"configurable": {"db": db}}
+            )
+            
+            response = result.get("response", "I'm not sure how to help with that, but I'm listening.")
+            intent = result.get("intent")
+            
+            trace.set_output({"response": response, "intent": intent})
+            
+            return {
+                "response": response,
+                "agent": "coach",
+                "intent": intent,
+                "thread_id": thread_id
+            }
+            
+        except Exception as e:
+            print(f"Coaching Agent Error: {e}")
+            trace.set_output({"error": str(e)})
+            raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/api/goals/generate-description", tags=["Goals"])
 async def generate_description(request: GenerateDescriptionRequest):
@@ -499,13 +492,6 @@ async def get_goal_motivation_insight(goal_id: str, userId: str = "neo", db: Asy
     On-demand computation.
     """
     goals_service = GoalsService(db)
-    
-    # Import presentation utils
-    from services.utils import (
-        determine_motivation_band,
-        get_micro_label,
-        build_risk_exposure_data
-    )
     
     # Get Goal details
     goal = await goals_service.get_goal(goal_id)

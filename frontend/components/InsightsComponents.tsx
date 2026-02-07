@@ -31,6 +31,7 @@ export interface AtRiskData {
 }
 
 export interface InsightsData {
+    goal_id: string;
     micro_label: string;
     motivation_label: string;
     message: string;
@@ -105,7 +106,6 @@ export function MotivationTrendSparkline({ history }: { history: MotivationHisto
         );
     }
 
-    // Check if all history points are from the same day
     // Check if all history points are from the same day
     const allSameDay = history.length > 1 && history.every(h =>
         new Date(h.date).toDateString() === new Date(history[0].date).toDateString()
@@ -363,9 +363,8 @@ export function AIQualityPanel({ quality }: { quality: MessageQuality }) {
     );
 }
 
-export function AtRiskCard({ atRisk, explanation }: { atRisk: AtRiskData; explanation: string | null }) {
+export function AtRiskCard({ atRisk, explanation, goalId }: { atRisk: AtRiskData; explanation: string | null; goalId: string }) {
     if (atRisk.level === "LOW") return null;
-
     const isHigh = atRisk.level === "HIGH";
     const bgColor = isHigh ? "bg-red-50 dark:bg-red-900/20" : "bg-amber-50 dark:bg-amber-900/20";
     const borderColor = isHigh ? "border-red-200 dark:border-red-800" : "border-amber-200 dark:border-amber-800";
@@ -407,7 +406,7 @@ export function AtRiskCard({ atRisk, explanation }: { atRisk: AtRiskData; explan
             )}
 
             <Link
-                href="/chat"
+                href={`/chat?goalId=${goalId}`}
                 className={`mt-4 inline-flex items-center gap-2 px-4 py-2 ${isHigh ? 'bg-red-500' : 'bg-amber-500'} text-white rounded-lg text-sm font-bold hover:opacity-90 transition-opacity`}
             >
                 Talk to Pulse AI
@@ -446,7 +445,7 @@ export function DailyPulseCard({ microLabel, motivationLabel, message }: {
     );
 }
 
-export function InsightsRightPanel({ insights }: { insights: InsightsData }) {
+export function InsightsRightPanel({ insights, goalId }: { insights: InsightsData; goalId: string }) {
     return (
         <div className="space-y-6">
             <AIQualityPanel quality={insights.message_quality || { encouragement: 0, alignment: 0, clarity: 0, average: 0 }} />
@@ -467,6 +466,7 @@ export function InsightsRightPanel({ insights }: { insights: InsightsData }) {
                     <AtRiskCard
                         atRisk={insights.at_risk}
                         explanation={insights.alert_explanation}
+                        goalId={goalId}
                     />
                 )}
             </div>

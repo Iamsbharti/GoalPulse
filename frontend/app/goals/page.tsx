@@ -563,8 +563,9 @@ export default function GoalsPage() {
           </div>
 
           {isLoading ? (
-            <div className="flex justify-center py-12">
-              <Loader2 className="animate-spin text-primary" size={32} />
+            <div className="flex flex-col items-center justify-center py-20">
+                <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin mb-4"></div>
+                <p className="text-gray-500 animate-pulse">Loading Your Resolutions...</p>
             </div>
           ) : goals.length === 0 ? (
             <div className="text-center py-16 bg-white dark:bg-white/5 rounded-2xl border border-gray-100 dark:border-gray-800">

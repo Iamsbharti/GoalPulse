@@ -128,6 +128,7 @@ export default function InsightsPage() {
                 <AtRiskCard
                   atRisk={insights.at_risk}
                   explanation={insights.alert_explanation}
+                  goalId={insights.goal_id}
                 />
 
                 {/* Motivation Breakdown */}
@@ -137,7 +138,7 @@ export default function InsightsPage() {
                 <MotivationTrendSparkline history={insights.motivation_history} />
               </div>
 
-              <InsightsRightPanel insights={insights} />
+              <InsightsRightPanel insights={insights} goalId={insights.goal_id}/>
             </div>
           ) : (
             <div className="text-center py-20">

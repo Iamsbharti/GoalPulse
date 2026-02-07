@@ -66,16 +66,13 @@ export default function GoalInsightsModal({ goalId, isOpen, onClose }: GoalInsig
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
-            {/* Backdrop */}
             <div
                 className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity"
                 onClick={onClose}
             />
 
-            {/* Modal Content */}
             <div className="relative w-full max-w-6xl bg-white dark:bg-[#121217] rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
 
-                {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-[#121217] z-10">
                     <h2 className="text-lg font-bold">Goal Insights</h2>
                     <button
@@ -86,7 +83,6 @@ export default function GoalInsightsModal({ goalId, isOpen, onClose }: GoalInsig
                     </button>
                 </div>
 
-                {/* Scrollable Body */}
                 <div className="flex-1 overflow-y-auto p-6 bg-gray-50 dark:bg-black/20">
                     {isLoading ? (
                         <div className="flex flex-col items-center justify-center py-20">
@@ -96,7 +92,6 @@ export default function GoalInsightsModal({ goalId, isOpen, onClose }: GoalInsig
                     ) : insights ? (
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-                            {/* Left Column: Main Message & Breakdown */}
                             <div className="lg:col-span-2 space-y-6">
                                 <DailyPulseCard
                                     microLabel={insights.micro_label}
@@ -111,8 +106,7 @@ export default function GoalInsightsModal({ goalId, isOpen, onClose }: GoalInsig
                                 </div>
                             </div>
 
-                            {/* Right Column: Risks & Quality */}
-                            <InsightsRightPanel insights={insights} />
+                            <InsightsRightPanel insights={insights} goalId={insights.goal_id} />
                         </div>
                     ) : (
                         <div className="text-center py-20">
