@@ -56,8 +56,8 @@ export function AuthLayout({ children, title, subtitle, linkText, linkUrl, linkA
                             Turn Dreams <br />
                             <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-purple-600">Into Reality</span>
                         </h2>
-                        <p className="text-lg text-gray-500 mt-4 max-w-md">
-                            Join thousands building their future, one habit at a time.
+                        <p className="text-lg text-gray-500 mt-4 max-w-md italic">
+                            "Success is the sum of small efforts, repeated day in and day out."
                         </p>
                     </div>
 
