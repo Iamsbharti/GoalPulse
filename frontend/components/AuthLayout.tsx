@@ -12,10 +12,7 @@ interface AuthLayoutProps {
 export function AuthLayout({ children, title, subtitle, linkText, linkUrl, linkAction }: AuthLayoutProps) {
     return (
         <div className="min-h-screen w-full flex bg-white overflow-hidden">
-            {/* Left Panel - Form */}
             <div className="w-full lg:w-[45%] bg-white relative flex items-center justify-center p-8 sm:p-12 lg:p-16">
-                <div className="absolute top-0 right-0 w-32 h-full bg-gradient-to-br from-primary/10 to-transparent" />
-
                 <div className="w-full max-w-md space-y-8 relative z-10">
                     <div>
                         <Link href="/" className="inline-flex items-center gap-2 mb-8 group">
@@ -41,7 +38,6 @@ export function AuthLayout({ children, title, subtitle, linkText, linkUrl, linkA
                 </div>
             </div>
 
-            {/* Right Panel - Illustration */}
             <div className="hidden lg:flex w-[55%] bg-[#F9FAFB] relative overflow-hidden items-center justify-center">
                 <div className="absolute inset-0">
                     <div className="absolute top-0 right-0 w-full h-full bg-gradient-to-br from-primary/5 via-transparent to-purple-500/10" />
@@ -61,7 +57,6 @@ export function AuthLayout({ children, title, subtitle, linkText, linkUrl, linkA
                         </p>
                     </div>
 
-                    {/* Feature Cards with hover effects */}
                     <div className="grid grid-cols-2 gap-4 mb-8">
                         <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
                             <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center mb-3">
@@ -97,7 +92,6 @@ export function AuthLayout({ children, title, subtitle, linkText, linkUrl, linkA
                     </div>
                 </div>
 
-                {/* Decorative curved line */}
                 <svg className="absolute left-0 bottom-0 w-full h-32 text-gray-100" viewBox="0 0 1440 120" fill="currentColor">
                     <path d="M0,60 C360,120 720,0 1080,60 C1260,90 1350,60 1440,40 L1440,120 L0,120 Z" />
                 </svg>
